@@ -26,3 +26,5 @@ struct set_t *set_init();
  * @return Whether the operation was a success
  */
 bool set_add(struct set_t *set, void *ptr);
+
+void set_free(struct set_t *set);

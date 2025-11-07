@@ -3,7 +3,7 @@
 struct set_t *set_init()
 {
     struct set_t *s = (struct set_t *) malloc(sizeof(struct set_t));
-    if (!s) return NULL;
+    if (unlikely(!s)) return NULL;
     s->count = 0;
     memset(s->addr_set, 0, sizeof(s->addr_set));
     return s;
@@ -20,4 +20,10 @@ bool set_add(struct set_t *set, void *ptr)
     if (set->count >= MAX_SET_SIZE) return false;
     set->addr_set[set->count++] = ptr;
     return true;
+}
+
+void set_free(struct set_t *set)
+{
+    if (unlikely(!set)) return;
+    free(set);
 }

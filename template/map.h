@@ -38,3 +38,5 @@ bool map_add(struct map_t* map, void *ptr, int32_t value);
  * @return Whether the pointer belongs to the map
  */
 bool map_contains(struct map_t *map, void *ptr);
+
+void map_free(struct map_t *map);

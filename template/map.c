@@ -12,7 +12,7 @@ struct map_t *map_init()
 
 bool map_add(struct map_t *map, void *ptr, int32_t value)
 {
-    if (!map) return false;
+    if (unlikely(!map)) return false;
     // Check if pointer already in map
     for (uint32_t i = 0; i < map->count; i++) {
         if (map->keys[i] == ptr) {
@@ -29,9 +29,15 @@ bool map_add(struct map_t *map, void *ptr, int32_t value)
 
 bool map_contains(struct map_t *map, void *ptr)
 {
-    if (!map) return false;
+    if (unlikely(!map)) return false;
     // Check if pointer already in map
     for (uint32_t i = 0; i < map->count; i++) {
         if (map->keys[i] == ptr) return true;
     }
+}
+
+void map_free(struct map_t *map)
+{
+    if (unlikely(!map)) return;
+    free(map);
 }
