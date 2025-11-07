@@ -26,6 +26,28 @@
 #include <tm.h>
 
 #include "macros.h"
+#include "lock.h"
+
+/**
+ * @brief List of dynamically allocated segments.
+ */
+struct segment_node {
+    struct segment_node* prev;
+    struct segment_node* next;
+    
+    struct v_lock_t lock;
+};
+typedef struct segment_node* segment_list;
+
+struct region {
+    version_clock_t version_clock;
+    
+    void* start;
+    size_t size;
+    size_t align;
+    
+    segment_list allocs;
+};
 
 /** Create (i.e. allocate + init) a new shared memory region, with one first non-free-able allocated segment of the requested size and alignment.
  * @param size  Size of the first shared segment of memory to allocate (in bytes), must be a positive multiple of the alignment
