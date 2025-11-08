@@ -10,8 +10,9 @@
  * @brief Minimalist map implementation, TODO: improve once solution works.
  */
 struct map_t {
-    void *keys[MAX_MAP_SIZE];
-    int32_t values[MAX_MAP_SIZE];
+    void* addresses[MAX_MAP_SIZE];
+    size_t sizes[MAX_MAP_SIZE];
+    void* values[MAX_MAP_SIZE];
     uint32_t count;
 };
 
@@ -28,7 +29,7 @@ struct map_t *map_init();
  * @param value value to add to map
  * @return Whether the operation was a success
  */
-bool map_add(struct map_t* map, void *ptr, int32_t value);
+bool map_add(struct map_t* map, void *ptr, size_t size, void* source);
 
 /**
  * Check if a pointer is a key in this map
@@ -38,5 +39,7 @@ bool map_add(struct map_t* map, void *ptr, int32_t value);
  * @return Whether the pointer belongs to the map
  */
 bool map_contains(struct map_t *map, void *ptr);
+
+bool map_get(struct map_t* map, void* ptr, void** size, void* target);
 
 void map_free(struct map_t *map);

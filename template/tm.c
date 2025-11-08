@@ -36,7 +36,7 @@ struct segment_node {
     struct segment_node* prev;
     struct segment_node* next;
     
-    struct v_lock_t* lock;
+    struct v_lock_t lock;
 };
 typedef struct segment_node* segment_list;
 
@@ -127,8 +127,55 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
  * @param tx     Transaction to end
  * @return Whether the whole transaction committed
 **/
-bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
-    // TODO: tm_end(shared_t, tx_t)
+bool tm_end(shared_t shared, tx_t tx) {
+    // Lock the write-set (Go through region LL and lock if they are in the write set)
+    struct segment_node *node = ((struct region *)shared)->allocs;
+    while (node) {
+        if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
+            if (!v_lock_acquire(&(node->lock))) {
+                // Failed to acquire lock -> abort transaction
+                return false;
+            }
+        }
+        node = node->next;
+    }
+
+    // Increment global version clock with CAS
+    // -> store new global version clock to variable: wv
+    version_clock_t wv = UINT32_MAX;
+
+    // Validate the read set
+    if (txn_set_wv(tx, wv)) {
+        node = ((struct region *)shared)->allocs;
+        while (node) {
+            if (txn_r_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
+                if (!txn_validate_read_loc(tx, &(node->lock))) {
+                    return false;
+                }
+            }        
+            node = node->next;
+        }
+    }
+
+    // Commit
+    node = ((struct region *)shared)->allocs;
+    while (node) {
+        if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
+            // TODO this is not right
+            // txn_write(tx, node);
+        }        
+        node = node->next;
+    }
+    
+    // Release locks
+    node = ((struct region *)shared)->allocs;
+    while (node) {
+        if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
+            v_lock_release(&(node->lock), wv);
+        }
+        node = node->next;
+    }
+
     return false;
 }
 
@@ -141,7 +188,9 @@ bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
  * @return Whether the whole transaction can continue
 **/
 bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
-    return txn_read(tx, (struct region *) shared, source, size, target);
+    // sample lock -> version, free?
+    return txn_read(tx, source, size, target);
+    // Post-validation: check if lock is free and has not changed.
 }
 
 /** [thread-safe] Write operation in the given transaction, source in a private region and target in the shared region.
@@ -152,9 +201,8 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
  * @param target Target start address (in the shared region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_write(shared_t unused(shared), tx_t unused(tx), void const* unused(source), size_t unused(size), void* unused(target)) {
-    // TODO: tm_write(shared_t, tx_t, void const*, size_t, void*)
-    return false;
+bool tm_write(shared_t unused(shared), tx_t tx, void const* source, size_t unused(size), void* unused(target)) {
+    return txn_write(tx, source, size, target);
 }
 
 /** [thread-safe] Memory allocation in the given transaction.
@@ -164,9 +212,28 @@ bool tm_write(shared_t unused(shared), tx_t unused(tx), void const* unused(sourc
  * @param target Pointer in private memory receiving the address of the first byte of the newly allocated, aligned segment
  * @return Whether the whole transaction can continue (success/nomem), or not (abort_alloc)
 **/
-alloc_t tm_alloc(shared_t unused(shared), tx_t unused(tx), size_t unused(size), void** unused(target)) {
-    // TODO: tm_alloc(shared_t, tx_t, size_t, void**)
-    return abort_alloc;
+alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
+    size_t align = ((struct region*) shared)->align;
+    align = align < sizeof(struct segment_node*) ? sizeof(void*) : align;
+
+    struct segment_node* sn;
+    if (unlikely(posix_memalign((void**)&sn, align, sizeof(struct segment_node) + size) != 0)) // Allocation failed
+        return nomem_alloc;
+
+    // Insert in the linked list
+    sn->prev = NULL;
+    sn->next = ((struct region*) shared)->allocs;
+    if (!v_lock_init(&(sn->lock))) {
+        free(sn);
+        return nomem_alloc;
+    }
+    if (sn->next) sn->next->prev = sn;
+    ((struct region*) shared)->allocs = sn;
+
+    void* segment = (void*) ((uintptr_t) sn + sizeof(struct segment_node));
+    memset(segment, 0, size);
+    *target = segment;
+    return success_alloc;
 }
 
 /** [thread-safe] Memory freeing in the given transaction.
@@ -175,7 +242,15 @@ alloc_t tm_alloc(shared_t unused(shared), tx_t unused(tx), size_t unused(size), 
  * @param target Address of the first byte of the previously allocated segment to deallocate
  * @return Whether the whole transaction can continue
 **/
-bool tm_free(shared_t unused(shared), tx_t unused(tx), void* unused(target)) {
-    // TODO: tm_free(shared_t, tx_t, void*)
-    return false;
+bool tm_free(shared_t shared, tx_t unused(tx), void* target) {
+    struct segment_node* sn = (struct segment_node*) ((uintptr_t) target - sizeof(struct segment_node));
+
+    // Remove from the linked list
+    if (sn->prev) sn->prev->next = sn->next;
+    else ((struct region*) shared)->allocs = sn->next;
+    if (sn->next) sn->next->prev = sn->prev;
+
+    v_lock_cleanup(&(sn->lock));
+    free(sn);
+    return true;
 }

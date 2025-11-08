@@ -1,6 +1,6 @@
 #include "txn.h"
 
-inline tx_t tx_from_ptr(struct txn_t *t)
+static inline tx_t tx_from_ptr(struct txn_t *t)
 {
     if (!t) return invalid_tx;
     // Very unlikely that (tx_t)t == invalid_tx
@@ -8,7 +8,7 @@ inline tx_t tx_from_ptr(struct txn_t *t)
     return (tx_t)(uintptr_t)t;
 }
 
-inline struct txn_t *tx_to_ptr(tx_t tx)
+static inline struct txn_t *tx_to_ptr(tx_t tx)
 {
     if (tx == invalid_tx) return NULL;
     return (struct txn_t *)(uintptr_t)tx;
@@ -36,4 +36,19 @@ void txn_free(tx_t tx)
     set_free(t->r_set);
     map_free(t->w_set);
     free(t);
+}
+
+bool txn_read(tx_t tx, void const *source, size_t size, void *target) {
+    // TODO
+    return false;
+}
+
+bool txn_write(tx_t tx, void const *source, size_t size, void *target) {
+    // TODO
+    return false;
+}
+
+bool txn_w_set_contains(tx_t tx, void *target){
+    struct txn_t *t = tx_to_ptr(tx);
+    return map_contains(t->w_set, target);
 }

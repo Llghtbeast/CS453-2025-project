@@ -28,6 +28,8 @@ bool v_lock_init(struct v_lock_t* lock);
 **/
 void v_lock_cleanup(struct v_lock_t* lock);
 
+bool v_lock_test(struct v_lock_t* lock);
+
 /** Wait and acquire the given lock.
  * @param lock Lock to acquire
  * @return Whether the operation is a success
@@ -36,8 +38,9 @@ bool v_lock_acquire(struct v_lock_t* lock);
 
 /** Release the given lock.
  * @param lock Lock to release
+ * @param wv write version clock of process release write-lock
 **/
-void v_lock_release(struct v_lock_t* lock);
+void v_lock_release(struct v_lock_t* lock, version_clock_t wv);
 
 /** Wait until woken up by a signal on the given lock.
  *  The lock is released until lock_wait completes at which point it is acquired
