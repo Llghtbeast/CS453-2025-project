@@ -27,3 +27,8 @@ void set_free(struct set_t *set)
     if (unlikely(!set)) return;
     free(set);
 }
+
+uint32_t set_size(struct set_t *set)
+{
+    return set->count;
+}

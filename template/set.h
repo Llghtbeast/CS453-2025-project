@@ -28,3 +28,5 @@ struct set_t *set_init();
 bool set_add(struct set_t *set, void *ptr);
 
 void set_free(struct set_t *set);
+
+uint32_t set_size(struct set_t *set);

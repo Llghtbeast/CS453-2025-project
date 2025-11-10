@@ -1,6 +1,8 @@
 #include "v_lock.h"
 
 bool v_lock_init(struct v_lock_t* lock) {
+    lock->lock_bit = false;
+    lock->version_clock = 0;
     return pthread_mutex_init(&(lock->mutex), NULL) == 0
         && pthread_cond_init(&(lock->cv), NULL) == 0;
 }
@@ -10,14 +12,25 @@ void v_lock_cleanup(struct v_lock_t *lock) {
     pthread_cond_destroy(&(lock->cv));
 }
 
+bool v_lock_test(struct v_lock_t *lock) {
+    return !lock->lock_bit;
+}
+
+version_clock_t v_lock_version(struct v_lock_t *lock) {
+    return lock->version_clock;
+}
+
 bool v_lock_acquire(struct v_lock_t *lock) {
     lock->lock_bit = true;
     return pthread_mutex_lock(&(lock->mutex)) == 0;
 }
 
-void v_lock_release(struct v_lock_t *lock, version_clock_t wv) {
-    lock->lock_bit = false;
+void v_lock_update_version(struct v_lock_t *lock, uint32_t wv) {
     lock->version_clock = wv;
+}
+
+void v_lock_release(struct v_lock_t *lock) {
+    lock->lock_bit = false;
     pthread_mutex_unlock(&(lock->mutex));
 }
 

@@ -43,3 +43,5 @@ bool map_contains(struct map_t *map, void *ptr);
 bool map_get(struct map_t* map, void* ptr, void** size, void* target);
 
 void map_free(struct map_t *map);
+
+uint32_t map_size(struct map_t *map);

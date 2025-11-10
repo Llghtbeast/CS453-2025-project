@@ -119,7 +119,7 @@ size_t tm_align(shared_t shared) {
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) {
-    return txn_create(is_ro, ((struct region *) shared)->version_clock);
+    return txn_create(is_ro, (struct region *) shared);
 }
 
 /** [thread-safe] End the given transaction.
@@ -129,54 +129,24 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
 **/
 bool tm_end(shared_t shared, tx_t tx) {
     // Lock the write-set (Go through region LL and lock if they are in the write set)
-    struct segment_node *node = ((struct region *)shared)->allocs;
-    while (node) {
-        if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            if (!v_lock_acquire(&(node->lock))) {
-                // Failed to acquire lock -> abort transaction
-                return false;
-            }
-        }
-        node = node->next;
-    }
+    if (!txn_lock_for_commit(tx)) return false;
 
     // Increment global version clock with CAS
     // -> store new global version clock to variable: wv
     version_clock_t wv = UINT32_MAX;
 
-    // Validate the read set
-    if (txn_set_wv(tx, wv)) {
-        node = ((struct region *)shared)->allocs;
-        while (node) {
-            if (txn_r_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-                if (!txn_validate_read_loc(tx, &(node->lock))) {
-                    return false;
-                }
-            }        
-            node = node->next;
-        }
+    if (!txn_set_wv(tx, wv)) {
+        // Validate the read set
+        if (!txn_validate_r_set(tx)) return false;
     }
 
     // Commit
-    node = ((struct region *)shared)->allocs;
-    while (node) {
-        if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            // TODO this is not right
-            // txn_write(tx, node);
-        }        
-        node = node->next;
-    }
+    txn_commit(tx);
     
     // Release locks
-    node = ((struct region *)shared)->allocs;
-    while (node) {
-        if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            v_lock_release(&(node->lock), wv);
-        }
-        node = node->next;
-    }
+    txn_release(tx);
 
-    return false;
+    return true;
 }
 
 /** [thread-safe] Read operation in the given transaction, source in the shared region and target in a private region.
