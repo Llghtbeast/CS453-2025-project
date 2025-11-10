@@ -173,6 +173,7 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
 **/
 bool tm_write(shared_t unused(shared), tx_t tx, void const* source, size_t unused(size), void* unused(target)) {
     return txn_write(tx, source, size, target);
+    return true;
 }
 
 /** [thread-safe] Memory allocation in the given transaction.

@@ -40,13 +40,22 @@ void txn_free(tx_t tx)
 }
 
 bool txn_read(tx_t tx, void const *source, size_t size, void *target) {
-    // TODO
+    struct txn_t *t = tx_to_ptr(tx);
+    // Add address to read set.
+    set_add(t->r_set, source);
+
+    // Check if address has already been written to
+    if (map_contains(t->w_set, source)) {
+        // map_get will write to target
+        map_get(t->w_set, source, size, target);
+    } else {
+        memcpy(target, source, size);
+    }
     return false;
 }
 
 bool txn_write(tx_t tx, void const *source, size_t size, void *target) {
-    // TODO
-    return false;
+    return map_add(tx_to_ptr(tx)->w_set, source, size, target);
 }
 
 bool txn_w_set_contains(tx_t tx, void *target){
@@ -54,6 +63,7 @@ bool txn_w_set_contains(tx_t tx, void *target){
     return map_contains(t->w_set, target);
 }
 
+// ======= tm_end methods ======= //
 bool txn_lock_for_commit(tx_t tx)
 {
     struct txn_t *t = tx_to_ptr(tx);
@@ -119,8 +129,10 @@ void txn_commit(tx_t tx)
 
     while (node) {
         if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            // TODO this is not right
-            // txn_write(tx, node);
+            for (size_t i = 0; i < t->w_set->count; i++)
+            {
+                memcpy(t->w_set->targets[i], t->w_set->sources[i], t->w_set->sizes[i]);
+            }
         }        
         node = node->next;
     }

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "tm.h"
 #include "set.h"
@@ -109,7 +110,7 @@ bool txn_write(tx_t tx, void const *source, size_t size, void *target);
 
 bool txn_w_set_contains(tx_t, void* target);
 
-// ======= Transaction end methods ======= //
+// ======= tm_end methods ======= //
 bool txn_lock_for_commit(tx_t tx);
 
 /**
