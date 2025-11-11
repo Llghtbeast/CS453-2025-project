@@ -9,7 +9,7 @@ struct set_t *set_init()
     return s;
 }
 
-bool set_add(struct set_t *set, void *ptr)
+bool set_add(struct set_t *set, void const *ptr)
 {
     if (!set) return false;
     // Check if pointer already in set
@@ -22,6 +22,15 @@ bool set_add(struct set_t *set, void *ptr)
     // Insert pointer at end of list
     set->addr_set[set->count++] = ptr;
     return true;
+}
+
+bool set_contains(struct set_t *set, void const *ptr) {
+    if (unlikely(!set)) return false;
+    // Check if pointer already in map
+    for (uint32_t i = 0; i < set->count; i++) {
+        if (set->addr_set[i] == ptr) return true;
+    }
+    return false;
 }
 
 void set_free(struct set_t *set)

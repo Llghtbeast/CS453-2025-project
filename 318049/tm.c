@@ -59,7 +59,7 @@ void* tm_start(shared_t shared) {
  * @return First allocated segment size
  **/
 size_t tm_size(shared_t shared) {
-    return share_size(shared);
+    return shared_size(shared);
 }
 
 /** [thread-safe] Return the alignment (in bytes) of the memory accesses on the given shared memory region.

@@ -10,7 +10,6 @@
 #include "set.h"
 #include "map.h"
 #include "macros.h"
-#include "tm.c"
 #include "shared.h"
 
 struct txn_t {
@@ -23,32 +22,6 @@ struct txn_t {
 };
 
 /**
- * Convert a pointer to a `struct txn_t` into a transaction identifier.
- *
- * The project defines `tx_t` as an unsigned integer type that can hold a
- * pointer value (`uintptr_t`). Use this helper to encode a live
- * `struct txn_t *` into a `tx_t`.
- *
- * @param t Pointer to a `struct txn_t` (may be NULL).
- * @return A `tx_t` encoding `t`, or `invalid_tx` if `t` is NULL or cannot be
- *         represented.
- */
-static inline tx_t tx_from_ptr(struct txn_t *t);
-
-/**
- * Convert a `tx_t` transaction identifier previously produced with
- * `tx_from_ptr` back into a `struct txn_t *`.
- *
- * @param tx Transaction identifier previously returned by
- *           `tx_from_ptr` (or `invalid_tx`).
- * @return A `struct txn_t *` corresponding to `tx`, or NULL when `tx ==`
- *         `invalid_tx`.
- *
- * @note Callers should not dereference the returned pointer if it is NULL.
- */
-static inline struct txn_t *tx_to_ptr(tx_t tx);
-
-/**
  * Allocate and initialize a new transaction object.
  *
  * Typical usage: the transaction manager calls this at transaction begin to
@@ -57,11 +30,11 @@ static inline struct txn_t *tx_to_ptr(tx_t tx);
  *
  * @param is_ro Whether the new transaction is read-only (true) or read-write
  *              (false).
- * @param r Shared memory region of the transactional memory.
+ * @param shared Shared memory region of the transactional memory.
  * @return A `tx_t` encoding a newly allocated `struct txn_t` on success, or
  *         `invalid_tx` on allocation failure.
  */
-tx_t txn_create(bool is_ro, struct shared *r);
+tx_t txn_create(bool is_ro, struct shared *shared);
 
 /**
  * Free transaction resources and the transaction object itself.
@@ -119,19 +92,3 @@ bool txn_write(tx_t tx, void const *source, size_t size, void *target);
  * @return Whether the whole transaction committed
  **/
 bool txn_end(tx_t tx);
-
-// ======= tm_end methods ======= //
-static bool txn_lock_for_commit(tx_t tx);
-
-/**
- * @return Whether tx->rv + 1 == wv
- */
-static bool txn_set_wv(tx_t tx, uint32_t wv);
-
-static bool txn_validate_r_set(tx_t tx);
-
-static void txn_w_commit(tx_t tx);
-
-static void txn_release_after_commit(tx_t tx);
-
-static bool txn_w_set_contains(tx_t, void* target);

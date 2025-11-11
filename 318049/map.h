@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
+
+#include "macros.h"
 
 #define MAX_MAP_SIZE 100
 
@@ -10,9 +13,9 @@
  * @brief Minimalist map implementation, TODO: improve once solution works.
  */
 struct map_t {
-    void* sources[MAX_MAP_SIZE];
+    void const* sources[MAX_MAP_SIZE];
     size_t sizes[MAX_MAP_SIZE];
-    void* targets[MAX_MAP_SIZE];
+    void const* targets[MAX_MAP_SIZE];
     uint32_t count;
 };
 
@@ -30,7 +33,7 @@ struct map_t *map_init();
  * @param target pointer to target write location
  * @return Whether the operation was a success
  */
-bool map_add(struct map_t* map, void *source, size_t size, void* target);
+bool map_add(struct map_t* map, void const *source, size_t size, void* target);
 
 /**
  * Check if a pointer is a key in this map
@@ -39,7 +42,7 @@ bool map_add(struct map_t* map, void *source, size_t size, void* target);
  * @param ptr the pointer to check belongs to map
  * @return Whether the pointer belongs to the map
  */
-bool map_contains(struct map_t *map, void *ptr);
+bool map_contains(struct map_t *map, void const *ptr);
 
 /**
  * Get an element to the map.
@@ -49,7 +52,7 @@ bool map_contains(struct map_t *map, void *ptr);
  * @param target pointer to target write location
  * @return Whether the operation was a success
  */
-bool map_get(struct map_t* map, void* source, size_t size, void* target);
+bool map_get(struct map_t* map, void const *source, size_t size, void* target);
 
 void map_free(struct map_t *map);
 

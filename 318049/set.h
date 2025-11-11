@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
+
+#include "macros.h"
 
 #define MAX_SET_SIZE 100
 
@@ -25,7 +28,9 @@ struct set_t *set_init();
  * @param ptr memory address to add to set
  * @return Whether the operation was a success
  */
-bool set_add(struct set_t *set, void *ptr);
+bool set_add(struct set_t *set, void const *ptr);
+
+bool set_contains(struct set_t *set, void const *ptr);
 
 void set_free(struct set_t *set);
 

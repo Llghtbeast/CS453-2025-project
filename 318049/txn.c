@@ -1,5 +1,16 @@
 #include "txn.h"
 
+/**
+ * Convert a pointer to a `struct txn_t` into a transaction identifier.
+ *
+ * The project defines `tx_t` as an unsigned integer type that can hold a
+ * pointer value (`uintptr_t`). Use this helper to encode a live
+ * `struct txn_t *` into a `tx_t`.
+ *
+ * @param t Pointer to a `struct txn_t` (may be NULL).
+ * @return A `tx_t` encoding `t`, or `invalid_tx` if `t` is NULL or cannot be
+ *         represented.
+ */
 static inline tx_t tx_from_ptr(struct txn_t *t)
 {
     if (!t) return invalid_tx;
@@ -8,6 +19,17 @@ static inline tx_t tx_from_ptr(struct txn_t *t)
     return (tx_t)(uintptr_t)t;
 }
 
+/**
+ * Convert a `tx_t` transaction identifier previously produced with
+ * `tx_from_ptr` back into a `struct txn_t *`.
+ *
+ * @param tx Transaction identifier previously returned by
+ *           `tx_from_ptr` (or `invalid_tx`).
+ * @return A `struct txn_t *` corresponding to `tx`, or NULL when `tx ==`
+ *         `invalid_tx`.
+ *
+ * @note Callers should not dereference the returned pointer if it is NULL.
+ */
 static inline struct txn_t *tx_to_ptr(tx_t tx)
 {
     if (tx == invalid_tx) return NULL;
@@ -45,12 +67,19 @@ bool txn_is_ro(tx_t tx) {
 
 bool txn_read(tx_t tx, void const *source, size_t size, void *target) {
     struct txn_t *t = tx_to_ptr(tx);
-    // Check if address has already been written to
-    if (map_contains(t->w_set, source)) {
-        // map_get will write to target
-        map_get(t->w_set, source, size, target);
-    } else {
+
+    // Check if transaction is read-only
+    if (t->is_ro) {
         memcpy(target, source, size);
+    }
+    else {
+        // Check if address has already been written to
+        if (map_contains(t->w_set, source)) {
+            // map_get will write to target
+            map_get(t->w_set, source, size, target);
+        } else {
+            memcpy(target, source, size);
+        }
     }
     
     // Post-validation: check if lock is free and has not changed. Else abort
@@ -59,8 +88,8 @@ bool txn_read(tx_t tx, void const *source, size_t size, void *target) {
         return false;
     }
 
-    // Add address to read set.
-    set_add(t->r_set, source);
+    // If transaction is read-write, add address to read set
+    if (!t->is_ro) { set_add(t->r_set, source); }
     return true;
 }
 
@@ -88,17 +117,17 @@ bool txn_end(tx_t tx) {
         if (!txn_set_wv(tx, wv)) {
             // Validate the read set
             if (!txn_validate_r_set(tx)){
-                txn_release(tx);
+                txn_release_after_commit(tx);
                 txn_free(tx);
                 return false;
             } 
         }
         
         // Commit
-        txn_commit(tx);
+        txn_w_commit(tx);
         
         // Release locks
-        txn_release(tx);
+        txn_release_after_commit(tx);
     }
 }
 
@@ -135,8 +164,11 @@ static bool txn_lock_for_commit(tx_t tx)
     return !abort;
 }
 
+/**
+ * @return Whether tx->rv + 1 == wv
+ */
 static bool txn_set_wv(tx_t tx, uint32_t wv) {
-    struct txn_t *t = tx_from_ptr(tx);
+    struct txn_t *t = tx_to_ptr(tx);
     t->w_version_clock = wv;
     return t->r_version_clock+1 == wv;
 }
@@ -146,9 +178,8 @@ static bool txn_validate_r_set(tx_t tx)
     struct txn_t *t = tx_to_ptr(tx);
     struct segment_node *node = t->shared->allocs;
 
-    // 
     while (node) {
-        if (txn_r_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
+        if (set_contains(t->r_set, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
             // If lock is not acquirable or the lock version clock is higher than tx->rv, abort.
             if (!v_lock_test(&(node->lock)) || 
                 v_lock_version(&(node->lock)) > t->r_version_clock)
