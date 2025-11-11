@@ -16,9 +16,8 @@ bool map_add(struct map_t *map, void *source, size_t size, void *target)
     if (unlikely(!map)) return false;
     // Check if pointer already in map
     for (uint32_t i = 0; i < map->count; i++) {
-        if (map->sources[i] == source) {
-            map->sizes[i] = size;
-            map->targets[i] = target;
+        if (map->sources[i] == source && map->sizes[i] == size) {
+            memcpy(map->targets[i], target, size);
             return true;
         }
     }
@@ -26,7 +25,15 @@ bool map_add(struct map_t *map, void *source, size_t size, void *target)
     if (map->count >= MAX_MAP_SIZE) return false;
     map->sources[map->count] = source;
     map->sizes[map->count] = size;
-    map->targets[map->count++] = target;
+
+    // Create a new container for value (maybe value stored at target changes)
+    map->targets[map->count] = malloc(size);
+    if(!map->targets[map->count]) {
+        return false;
+    }
+    memcpy(map->targets[map->count], source, size);
+
+    map->count++;
     return true;
 }
 
@@ -39,8 +46,15 @@ bool map_contains(struct map_t *map, void *source)
     }
 }
 
-bool map_get(struct map_t *map, void *source, void *size, void *target)
+bool map_get(struct map_t *map, void *source, size_t size, void *target)
 {
+    for (size_t i = 0; i < map->count; i++)
+    {
+        if (map->sources[i] == source && map->sizes[i] == size) {
+            memcpy(target, size, map->targets[i]);
+            return true;
+        }
+    }
     return false;
 }
 

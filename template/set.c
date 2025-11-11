@@ -18,6 +18,8 @@ bool set_add(struct set_t *set, void *ptr)
     }
     // Check if there is enough space to add
     if (set->count >= MAX_SET_SIZE) return false;
+
+    // Insert pointer at end of list
     set->addr_set[set->count++] = ptr;
     return true;
 }

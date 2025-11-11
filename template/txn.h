@@ -11,9 +11,10 @@
 #include "map.h"
 #include "macros.h"
 #include "tm.c"
+#include "shared.h"
 
 struct txn_t {
-    struct region *shared;
+    struct shared *shared;
     bool is_ro;
     version_clock_t r_version_clock;
     version_clock_t w_version_clock;
@@ -60,7 +61,7 @@ static inline struct txn_t *tx_to_ptr(tx_t tx);
  * @return A `tx_t` encoding a newly allocated `struct txn_t` on success, or
  *         `invalid_tx` on allocation failure.
  */
-tx_t txn_create(bool is_ro, struct region *r);
+tx_t txn_create(bool is_ro, struct shared *r);
 
 /**
  * Free transaction resources and the transaction object itself.
@@ -72,6 +73,11 @@ tx_t txn_create(bool is_ro, struct region *r);
  * @param tx Transaction identifier to free.
  */
 void txn_free(tx_t tx);
+
+/**
+ * @return Whether the transaction is read-only or not
+ */
+bool txn_is_ro(tx_t tx);
 
 /**
  * Read `size` bytes from `target` region address into `source` under the context of
@@ -108,18 +114,24 @@ bool txn_read(tx_t tx, void const *source, size_t size, void *target);
  */
 bool txn_write(tx_t tx, void const *source, size_t size, void *target);
 
-bool txn_w_set_contains(tx_t, void* target);
+/** End the transaction and cleanup.
+ * @param tx     Transaction to end
+ * @return Whether the whole transaction committed
+ **/
+bool txn_end(tx_t tx);
 
 // ======= tm_end methods ======= //
-bool txn_lock_for_commit(tx_t tx);
+static bool txn_lock_for_commit(tx_t tx);
 
 /**
  * @return Whether tx->rv + 1 == wv
  */
-bool txn_set_wv(tx_t tx, uint32_t wv);
+static bool txn_set_wv(tx_t tx, uint32_t wv);
 
-bool txn_validate_r_set(tx_t tx);
+static bool txn_validate_r_set(tx_t tx);
 
-void txn_commit(tx_t tx);
+static void txn_w_commit(tx_t tx);
 
-void txn_release_after_commit(tx_t tx);
+static void txn_release_after_commit(tx_t tx);
+
+static bool txn_w_set_contains(tx_t, void* target);
