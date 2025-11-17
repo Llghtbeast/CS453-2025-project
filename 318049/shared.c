@@ -1,6 +1,6 @@
 #include "shared.h"
 
-static inline struct shared * shared_to_ptr(shared_t shared) {
+struct shared * shared_to_ptr(shared_t shared) {
     if (unlikely(shared == invalid_shared)) {
         return NULL;
     }
@@ -12,8 +12,7 @@ shared_t shared_create(size_t size, size_t align) {
     if (unlikely(!shared)) {
         return invalid_shared;
     }
-    // We allocate the shared memory buffer such that its words are correctly
-    // aligned.
+    // We allocate the shared memory buffer such that its words are correctly aligned.
     if (posix_memalign(&(shared->start), align, size) != 0) {
         free(shared);
         return invalid_shared;
@@ -48,6 +47,12 @@ size_t shared_size(shared_t shared) {
 
 size_t shared_align(shared_t shared) {
     return ((struct shared *) shared)->align;
+}
+
+version_clock_t shared_update_version_clock(shared_t shared, version_clock_t version)
+{
+    struct shared *s = shared_to_ptr(shared);
+    return atomic_fetch_add(&(s->version_clock), 1);
 }
 
 alloc_t shared_alloc(shared_t shared, size_t size, void **target) {

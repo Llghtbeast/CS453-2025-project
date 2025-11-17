@@ -55,7 +55,7 @@ bool v_lock_acquire(struct v_lock_t* lock);
  * Update the version clock of the lock
  * @param wv write version clock of process release write-lock
  */
-void v_lock_update_version(struct v_lock_t *lock, uint32_t wv);
+void v_lock_update_version(struct v_lock_t *lock, version_clock_t wv);
 
 /** 
  * Release the given lock.

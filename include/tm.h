@@ -28,6 +28,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 // -------------------------------------------------------------------------- //
 
@@ -46,7 +47,8 @@ static alloc_t const success_alloc = 0; // Allocation successful and the TX can 
 static alloc_t const abort_alloc   = 1; // TX was aborted and could be retried
 static alloc_t const nomem_alloc   = 2; // Memory allocation failed but TX was not aborted
 
-typedef uint32_t version_clock_t; // The type of the version clock
+typedef unsigned int version_clock_t; // The type of the version clock
+typedef _Atomic version_clock_t atomic_version_clock; // the atomic version clock variables
 
 // -------------------------------------------------------------------------- //
 

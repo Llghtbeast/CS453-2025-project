@@ -25,7 +25,7 @@ bool v_lock_acquire(struct v_lock_t *lock) {
     return pthread_mutex_lock(&(lock->mutex)) == 0;
 }
 
-void v_lock_update_version(struct v_lock_t *lock, uint32_t wv) {
+void v_lock_update_version(struct v_lock_t *lock, version_clock_t wv) {
     lock->version_clock = wv;
 }
 

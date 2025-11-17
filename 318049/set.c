@@ -13,7 +13,7 @@ bool set_add(struct set_t *set, void const *ptr)
 {
     if (!set) return false;
     // Check if pointer already in set
-    for (uint32_t i = 0; i < set->count; i++) {
+    for (size_t i = 0; i < set->count; i++) {
         if (set->addr_set[i] == ptr) return true;
     }
     // Check if there is enough space to add
@@ -27,7 +27,7 @@ bool set_add(struct set_t *set, void const *ptr)
 bool set_contains(struct set_t *set, void const *ptr) {
     if (unlikely(!set)) return false;
     // Check if pointer already in map
-    for (uint32_t i = 0; i < set->count; i++) {
+    for (size_t i = 0; i < set->count; i++) {
         if (set->addr_set[i] == ptr) return true;
     }
     return false;
@@ -39,7 +39,7 @@ void set_free(struct set_t *set)
     free(set);
 }
 
-uint32_t set_size(struct set_t *set)
+size_t set_size(struct set_t *set)
 {
     return set->count;
 }

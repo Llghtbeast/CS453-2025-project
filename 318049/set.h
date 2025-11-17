@@ -14,7 +14,7 @@
  */
 struct set_t {
     void *addr_set[MAX_SET_SIZE];
-    uint32_t count;
+    size_t count;
 };
 
 /**
@@ -34,4 +34,4 @@ bool set_contains(struct set_t *set, void const *ptr);
 
 void set_free(struct set_t *set);
 
-uint32_t set_size(struct set_t *set);
+size_t set_size(struct set_t *set);

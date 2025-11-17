@@ -16,7 +16,7 @@ struct map_t {
     void const* sources[MAX_MAP_SIZE];
     size_t sizes[MAX_MAP_SIZE];
     void const* targets[MAX_MAP_SIZE];
-    uint32_t count;
+    size_t count;
 };
 
 /**
@@ -56,4 +56,4 @@ bool map_get(struct map_t* map, void const *source, size_t size, void* target);
 
 void map_free(struct map_t *map);
 
-uint32_t map_size(struct map_t *map);
+size_t map_size(struct map_t *map);

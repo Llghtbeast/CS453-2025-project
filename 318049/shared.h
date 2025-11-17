@@ -23,7 +23,7 @@ struct segment_node {
 typedef struct segment_node* segment_list;
 
 struct shared {
-    version_clock_t version_clock;
+    atomic_version_clock version_clock;
     
     void* start;
     size_t size;
@@ -31,6 +31,8 @@ struct shared {
     
     segment_list allocs;
 };
+
+struct shared * shared_to_ptr(shared_t shared);
 
 shared_t shared_create(size_t size, size_t align);
 
@@ -41,6 +43,8 @@ void* shared_start(shared_t shared);
 size_t shared_size(shared_t shared);
 
 size_t shared_align(shared_t shared);
+
+version_clock_t shared_update_version_clock(shared_t shared, version_clock_t version);
 
 alloc_t shared_alloc(shared_t shared, size_t size, void** target);
 

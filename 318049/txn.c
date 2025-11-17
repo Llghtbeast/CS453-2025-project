@@ -36,14 +36,13 @@ static inline struct txn_t *tx_to_ptr(tx_t tx)
     return (struct txn_t *)(uintptr_t)tx;
 }
 
-tx_t txn_create(bool is_ro, struct shared *shared)
+tx_t txn_create(bool is_ro, shared_t shared)
 {
     struct txn_t *t = malloc(sizeof(struct txn_t));
     if (unlikely(!t)) return invalid_tx;
 
-    t->shared = shared;
     t->is_ro = is_ro;
-    t->r_version_clock = shared->version_clock; // Should be an atomic read
+    t->r_version_clock = atomic_load(&(shared_to_ptr(shared)->version_clock)); // Should be an atomic read
     t->w_version_clock = 0;
     t->r_set = set_init();
     t->w_set = map_init();
@@ -97,7 +96,7 @@ bool txn_write(tx_t tx, void const *source, size_t size, void *target) {
     return map_add(tx_to_ptr(tx)->w_set, source, size, target);
 }
 
-bool txn_end(tx_t tx) {
+bool txn_end(tx_t tx, shared_t shared) {
     struct txn_t *t = tx_to_ptr(tx);
     if (t->is_ro) {
         txn_free(tx);
@@ -105,41 +104,42 @@ bool txn_end(tx_t tx) {
     }
     else {
         // Lock the write-set (Go through region LL and lock if they are in the write set)
-        if (!txn_lock_for_commit(tx)) {
+        if (!txn_lock_for_commit(tx, shared)) {
             txn_free(tx);
             return false;
         }
 
         // Increment global version clock with CAS
         // -> store new global version clock to variable: wv
-        version_clock_t wv = UINT32_MAX;
+        version_clock_t wv = shared_update_version_clock(shared, t->r_version_clock);
         
         if (!txn_set_wv(tx, wv)) {
             // Validate the read set
-            if (!txn_validate_r_set(tx)){
-                txn_release_after_commit(tx);
+            if (!txn_validate_r_set(tx, shared)){
+                txn_release_after_commit(tx, shared);
                 txn_free(tx);
                 return false;
             } 
         }
         
         // Commit
-        txn_w_commit(tx);
+        txn_w_commit(tx, shared);
         
         // Release locks
-        txn_release_after_commit(tx);
+        txn_release_after_commit(tx, shared);
     }
 }
 
 // ======= txn_end methods ======= //
-static bool txn_lock_for_commit(tx_t tx)
+static bool txn_lock_for_commit(tx_t tx, shared_t shared)
 {
     struct txn_t *t = tx_to_ptr(tx);
-    struct segment_node *node = t->shared->allocs;
+    struct shared *s = shared_to_ptr(shared);
+    struct segment_node *node = s->allocs;
     
     bool abort = false;
     struct v_lock_t* acquired_locks[map_size(t->w_set)];
-    uint32_t count = 0;
+    size_t count = 0;
     // Try acquiring all locks
     while (node) {
         if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
@@ -167,16 +167,16 @@ static bool txn_lock_for_commit(tx_t tx)
 /**
  * @return Whether tx->rv + 1 == wv
  */
-static bool txn_set_wv(tx_t tx, uint32_t wv) {
+static bool txn_set_wv(tx_t tx, version_clock_t wv) {
     struct txn_t *t = tx_to_ptr(tx);
     t->w_version_clock = wv;
     return t->r_version_clock+1 == wv;
 }
 
-static bool txn_validate_r_set(tx_t tx)
+static bool txn_validate_r_set(tx_t tx, shared_t shared)
 {
     struct txn_t *t = tx_to_ptr(tx);
-    struct segment_node *node = t->shared->allocs;
+    struct segment_node *node = shared_to_ptr(shared)->allocs;
 
     while (node) {
         if (set_contains(t->r_set, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
@@ -192,10 +192,10 @@ static bool txn_validate_r_set(tx_t tx)
     return true;
 }
 
-static void txn_w_commit(tx_t tx)
+static void txn_w_commit(tx_t tx, shared_t shared)
 {
     struct txn_t *t = tx_to_ptr(tx);
-    struct segment_node *node = t->shared->allocs;
+    struct segment_node *node = shared_to_ptr(shared)->allocs;
 
     while (node) {
         if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
@@ -208,10 +208,10 @@ static void txn_w_commit(tx_t tx)
     }
 }
 
-static void txn_release_after_commit(tx_t tx)
+static void txn_release_after_commit(tx_t tx, shared_t shared)
 {
     struct txn_t *t = tx_to_ptr(tx);
-    struct segment_node *node = t->shared->allocs;
+    struct segment_node *node = shared_to_ptr(shared)->allocs;
 
     while (node) {
         if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {

@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 
 #include "tm.h"
 #include "set.h"
@@ -13,7 +14,6 @@
 #include "shared.h"
 
 struct txn_t {
-    struct shared *shared;
     bool is_ro;
     version_clock_t r_version_clock;
     version_clock_t w_version_clock;
@@ -34,7 +34,7 @@ struct txn_t {
  * @return A `tx_t` encoding a newly allocated `struct txn_t` on success, or
  *         `invalid_tx` on allocation failure.
  */
-tx_t txn_create(bool is_ro, struct shared *shared);
+tx_t txn_create(bool is_ro, shared_t shared);
 
 /**
  * Free transaction resources and the transaction object itself.

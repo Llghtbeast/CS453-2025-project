@@ -15,7 +15,7 @@ bool map_add(struct map_t *map, void const *source, size_t size, void *target)
 {
     if (unlikely(!map)) return false;
     // Check if pointer already in map
-    for (uint32_t i = 0; i < map->count; i++) {
+    for (size_t i = 0; i < map->count; i++) {
         if (map->sources[i] == source && map->sizes[i] == size) {
             memcpy(map->targets[i], target, size);
             return true;
@@ -41,7 +41,7 @@ bool map_contains(struct map_t *map, void const *source)
 {
     if (unlikely(!map)) return false;
     // Check if pointer already in map
-    for (uint32_t i = 0; i < map->count; i++) {
+    for (size_t i = 0; i < map->count; i++) {
         if (map->targets[i] == source) return true;
     }
     return false;
@@ -65,7 +65,7 @@ void map_free(struct map_t *map)
     free(map);
 }
 
-uint32_t map_size(struct map_t *map)
+size_t map_size(struct map_t *map)
 {
     return map->count;
 }
