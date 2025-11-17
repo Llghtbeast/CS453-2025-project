@@ -76,7 +76,7 @@ size_t tm_align(shared_t shared) {
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) {
-    return txn_create(is_ro, (struct shared *) shared);
+    return txn_create(is_ro, shared);
 }
 
 /** [thread-safe] End the given transaction.
@@ -84,8 +84,8 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
  * @param tx     Transaction to end
  * @return Whether the whole transaction committed
 **/
-bool tm_end(shared_t unused(shared), tx_t tx) {
-    return txn_end(tx);
+bool tm_end(shared_t shared, tx_t tx) {
+    return txn_end(tx, shared);
 }
 
 /** [thread-safe] Read operation in the given transaction, source in the shared region and target in a private region.

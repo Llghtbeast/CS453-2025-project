@@ -13,7 +13,7 @@
  * @brief Minimalist set implementation, TODO: improve once solution works.
  */
 struct set_t {
-    void *addr_set[MAX_SET_SIZE];
+    void const*addr_set[MAX_SET_SIZE];
     size_t count;
 };
 

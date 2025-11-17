@@ -1,5 +1,6 @@
 #include "txn.h"
 
+// ============================================= static function prototypes =============================================
 /**
  * Convert a pointer to a `struct txn_t` into a transaction identifier.
  *
@@ -11,13 +12,7 @@
  * @return A `tx_t` encoding `t`, or `invalid_tx` if `t` is NULL or cannot be
  *         represented.
  */
-static inline tx_t tx_from_ptr(struct txn_t *t)
-{
-    if (!t) return invalid_tx;
-    // Very unlikely that (tx_t)t == invalid_tx
-    if (unlikely((tx_t)(uintptr_t)t == invalid_tx)) return invalid_tx;
-    return (tx_t)(uintptr_t)t;
-}
+static inline tx_t tx_from_ptr(struct txn_t *t);
 
 /**
  * Convert a `tx_t` transaction identifier previously produced with
@@ -30,11 +25,26 @@ static inline tx_t tx_from_ptr(struct txn_t *t)
  *
  * @note Callers should not dereference the returned pointer if it is NULL.
  */
-static inline struct txn_t *tx_to_ptr(tx_t tx)
-{
-    if (tx == invalid_tx) return NULL;
-    return (struct txn_t *)(uintptr_t)tx;
-}
+static inline struct txn_t *tx_to_ptr(tx_t tx);
+
+// ------- txn_end helper -------
+
+static bool txn_lock(tx_t tx, shared_t shared);
+
+/**
+ * @return Whether tx->rv + 1 == wv
+ */
+static bool txn_set_wv(tx_t tx, version_clock_t wv);
+
+static bool txn_validate_r_set(tx_t tx, shared_t shared);
+
+static void txn_w_commit(tx_t tx, shared_t shared);
+
+static void txn_release(tx_t tx, shared_t shared, bool committed);
+
+static bool txn_w_set_contains(tx_t tx, void *target);
+
+// ============================================= global functions =============================================
 
 tx_t txn_create(bool is_ro, shared_t shared)
 {
@@ -98,25 +108,21 @@ bool txn_write(tx_t tx, void const *source, size_t size, void *target) {
 
 bool txn_end(tx_t tx, shared_t shared) {
     struct txn_t *t = tx_to_ptr(tx);
-    if (t->is_ro) {
-        txn_free(tx);
-        return true;
-    }
-    else {
+    // If transaction is read write, perform additional steps
+    if (!t->is_ro) {
         // Lock the write-set (Go through region LL and lock if they are in the write set)
-        if (!txn_lock_for_commit(tx, shared)) {
+        if (!txn_lock(tx, shared)) {
             txn_free(tx);
             return false;
         }
 
-        // Increment global version clock with CAS
-        // -> store new global version clock to variable: wv
-        version_clock_t wv = shared_update_version_clock(shared, t->r_version_clock);
+        // Increment global version clock
+        version_clock_t wv = shared_update_version_clock(shared);
         
         if (!txn_set_wv(tx, wv)) {
             // Validate the read set
             if (!txn_validate_r_set(tx, shared)){
-                txn_release_after_commit(tx, shared);
+                txn_release(tx, shared, false);
                 txn_free(tx);
                 return false;
             } 
@@ -126,13 +132,28 @@ bool txn_end(tx_t tx, shared_t shared) {
         txn_w_commit(tx, shared);
         
         // Release locks
-        txn_release_after_commit(tx, shared);
+        txn_release(tx, shared, true);
     }
+
+    // Destroy the commited transaction
+    txn_free(tx);
+    return true;
 }
 
-// ======= txn_end methods ======= //
-static bool txn_lock_for_commit(tx_t tx, shared_t shared)
-{
+// ============================================= static functions implementation =============================================
+static inline tx_t tx_from_ptr(struct txn_t *t) {
+    if (!t) return invalid_tx;
+    // Very unlikely that (tx_t)t == invalid_tx
+    if (unlikely((tx_t)(uintptr_t)t == invalid_tx)) return invalid_tx;
+    return (tx_t)(uintptr_t)t;
+}
+
+static inline struct txn_t *tx_to_ptr(tx_t tx) {
+    if (tx == invalid_tx) return NULL;
+    return (struct txn_t *)(uintptr_t)tx;
+}
+
+static bool txn_lock(tx_t tx, shared_t shared) {
     struct txn_t *t = tx_to_ptr(tx);
     struct shared *s = shared_to_ptr(shared);
     struct segment_node *node = s->allocs;
@@ -164,9 +185,6 @@ static bool txn_lock_for_commit(tx_t tx, shared_t shared)
     return !abort;
 }
 
-/**
- * @return Whether tx->rv + 1 == wv
- */
 static bool txn_set_wv(tx_t tx, version_clock_t wv) {
     struct txn_t *t = tx_to_ptr(tx);
     t->w_version_clock = wv;
@@ -208,14 +226,17 @@ static void txn_w_commit(tx_t tx, shared_t shared)
     }
 }
 
-static void txn_release_after_commit(tx_t tx, shared_t shared)
+static void txn_release(tx_t tx, shared_t shared, bool committed)
 {
     struct txn_t *t = tx_to_ptr(tx);
     struct segment_node *node = shared_to_ptr(shared)->allocs;
 
     while (node) {
         if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            v_lock_update_version(&(node->lock), t->w_version_clock);
+            // If transaction has committed, update lock versions
+            if (committed) {
+                v_lock_update_version(&(node->lock), t->w_version_clock);
+            }
             v_lock_release(&(node->lock));
         }
         node = node->next;

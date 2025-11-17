@@ -91,4 +91,4 @@ bool txn_write(tx_t tx, void const *source, size_t size, void *target);
  * @param tx     Transaction to end
  * @return Whether the whole transaction committed
  **/
-bool txn_end(tx_t tx);
+bool txn_end(tx_t tx, shared_t shared);

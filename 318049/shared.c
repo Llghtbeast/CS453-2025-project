@@ -49,7 +49,7 @@ size_t shared_align(shared_t shared) {
     return ((struct shared *) shared)->align;
 }
 
-version_clock_t shared_update_version_clock(shared_t shared, version_clock_t version)
+version_clock_t shared_update_version_clock(shared_t shared)
 {
     struct shared *s = shared_to_ptr(shared);
     return atomic_fetch_add(&(s->version_clock), 1);

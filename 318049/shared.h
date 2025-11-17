@@ -44,7 +44,7 @@ size_t shared_size(shared_t shared);
 
 size_t shared_align(shared_t shared);
 
-version_clock_t shared_update_version_clock(shared_t shared, version_clock_t version);
+version_clock_t shared_update_version_clock(shared_t shared);
 
 alloc_t shared_alloc(shared_t shared, size_t size, void** target);
 

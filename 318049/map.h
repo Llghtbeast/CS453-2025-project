@@ -15,7 +15,7 @@
 struct map_t {
     void const* sources[MAX_MAP_SIZE];
     size_t sizes[MAX_MAP_SIZE];
-    void const* targets[MAX_MAP_SIZE];
+    void* targets[MAX_MAP_SIZE];
     size_t count;
 };
 
