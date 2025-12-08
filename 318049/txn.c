@@ -55,7 +55,7 @@ tx_t txn_create(bool is_ro, shared_t shared)
     t->r_version_clock = atomic_load(&(shared_to_ptr(shared)->version_clock)); // Should be an atomic read
     t->w_version_clock = 0;
     t->r_set = set_init();
-    t->w_set = map_init();
+    t->w_set = write_set_init();
 
     return tx_from_ptr(t);
 }
@@ -66,7 +66,7 @@ void txn_free(tx_t tx)
     if (unlikely(!t)) return;
     
     set_free(t->r_set);
-    map_free(t->w_set);
+    write_set_free(t->w_set);
     free(t);
 }
 
@@ -82,11 +82,9 @@ bool txn_read(tx_t tx, void const *source, size_t size, void *target) {
         memcpy(target, source, size);
     }
     else {
-        // Check if address has already been written to
-        if (map_contains(t->w_set, source)) {
-            // map_get will write to target
-            map_get(t->w_set, source, size, target);
-        } else {
+        // write_set_get will write to target if the write set contains the target
+        if (!write_set_get(t->w_set, target, size, source)) {
+            // If write set does not contain the source, write
             memcpy(target, source, size);
         }
     }
@@ -103,7 +101,7 @@ bool txn_read(tx_t tx, void const *source, size_t size, void *target) {
 }
 
 bool txn_write(tx_t tx, void const *source, size_t size, void *target) {
-    return map_add(tx_to_ptr(tx)->w_set, source, size, target);
+    return write_set_add(tx_to_ptr(tx)->w_set, source, size, target);
 }
 
 bool txn_end(tx_t tx, shared_t shared) {
@@ -159,7 +157,7 @@ static bool txn_lock(tx_t tx, shared_t shared) {
     struct segment_node *node = s->allocs;
     
     bool abort = false;
-    struct v_lock_t* acquired_locks[map_size(t->w_set)];
+    struct v_lock_t* acquired_locks[write_set_size(t->w_set)];
     size_t count = 0;
     // Try acquiring all locks
     while (node) {
@@ -219,7 +217,8 @@ static void txn_w_commit(tx_t tx, shared_t shared)
         if (txn_w_set_contains(tx, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
             for (size_t i = 0; i < t->w_set->count; i++)
             {
-                memcpy(t->w_set->targets[i], t->w_set->sources[i], t->w_set->sizes[i]);
+                struct write_entry_t *we = t->w_set->entries[i];
+                memcpy(we->target, we->data, we->size);
             }
         }        
         node = node->next;
@@ -245,5 +244,5 @@ static void txn_release(tx_t tx, shared_t shared, bool committed)
 
 static bool txn_w_set_contains(tx_t tx, void *target){
     struct txn_t *t = tx_to_ptr(tx);
-    return map_contains(t->w_set, target);
+    return write_set_contains(t->w_set, target);
 }

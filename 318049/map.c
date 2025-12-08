@@ -1,71 +1,126 @@
 #include "map.h"
 
-struct map_t *map_init()
+// ============== write_entry_t methods ============== 
+struct write_entry_t * write_entry_create(void const *source, size_t size, void *target)
 {
-    struct map_t *m = (struct map_t *) malloc(sizeof(struct map_t));
-    if (!m) return NULL;
-    m->count = 0;
-    memset(m->targets, 0, sizeof(m->targets));
-    memset(m->sizes, 0, sizeof(m->sizes));
-    memset(m->sources, 0, sizeof(m->sources));
-    return m;
+    // Allocate memory for struct
+    struct write_entry_t *we = malloc(sizeof(struct write_entry_t));
+    if (unlikely(!we)) return NULL;
+
+    // Try allocating memory for data 
+    we->data = malloc(size);
+    if (unlikely(!(we->data))) {
+        write_entry_free(we);
+        return NULL;
+    }
+
+    // Create write_entry
+    we->target = target;
+    we->size = size;
+    memcpy(we->data, source, size);
+
+    return we;
 }
 
-bool map_add(struct map_t *map, void const *source, size_t size, void *target)
+bool write_entry_update(struct write_entry_t *we, void const *source, size_t size)
 {
-    if (unlikely(!map)) return false;
-    // Check if pointer already in map
-    for (size_t i = 0; i < map->count; i++) {
-        if (map->sources[i] == source && map->sizes[i] == size) {
-            memcpy(map->targets[i], target, size);
+    if (unlikely(!we)) return false;
+    if (size != we->size) return false;
+
+    // Update write entry
+    memcpy(we->data, source, size);
+}
+
+void write_entry_free(struct write_entry_t *we)
+{
+    free(we->data);
+    free(we);
+}
+
+// ============== write_set_t methods ============== 
+struct write_set_t *write_set_init()
+{
+    // Allocate memory for the write_set_t structure
+    struct write_set_t *ws = (struct write_set_t *)malloc(sizeof(struct write_set_t));
+    if (unlikely(!ws)) {
+        return NULL;
+    }
+
+    // Initialize attributes
+    ws->count = 0;
+    ws->capacity = INITIAL_CAPACITY;
+    ws->entries = NULL;
+  
+    return ws;
+}
+
+bool write_set_add(struct write_set_t *ws, void const *source, size_t size, void *target)
+{
+    if (unlikely(!ws)) return false;
+
+    // Check if pointer already in write_set
+    for (size_t i = 0; i < ws->count; i++) {
+        struct write_entry_t *entry = ws->entries[i];
+        if (entry->target == target) {
+            write_entry_update(entry, source, size);
             return true;
         }
     }
-    // Check if there is enough space to add
-    if (map->count >= MAX_MAP_SIZE) return false;
-    map->sources[map->count] = source;
-    map->sizes[map->count] = size;
 
-    // Create a new container for value (maybe value stored at target changes)
-    map->targets[map->count] = malloc(size);
-    if(!map->targets[map->count]) {
-        return false;
+    // Increase capacity if needed
+    if (ws->count >= ws->capacity) {
+        ws->capacity *= GROW_FACTOR;
     }
-    memcpy(map->targets[map->count], source, size);
 
-    map->count++;
+    // Create a new write entry
+    struct write_entry_t *we = write_entry_create(source, size, target);
+    ws->entries[ws->count++] = we;
+
     return true;
 }
 
-bool map_contains(struct map_t *map, void const *source)
+bool write_set_contains(struct write_set_t *ws, void *target)
 {
-    if (unlikely(!map)) return false;
-    // Check if pointer already in map
-    for (size_t i = 0; i < map->count; i++) {
-        if (map->targets[i] == source) return true;
+    if (unlikely(!ws)) return false;
+    // Check if pointer already in write_set
+    for (size_t i = 0; i < ws->count; i++) {
+        if (ws->entries[i]->target == target) return true;
     }
     return false;
 }
 
-bool map_get(struct map_t *map, void const *source, size_t size, void *target)
+bool write_set_get(struct write_set_t *ws, void const *source, size_t size, void *target)
 {
-    for (size_t i = 0; i < map->count; i++)
+    for (size_t i = 0; i < ws->count; i++)
     {
-        if (map->sources[i] == source && map->sizes[i] == size) {
-            memcpy(target, map->targets[i], size);
+        struct write_entry_t *we = ws->entries[i];
+        if (we->target == source && we->size == size) {
+            memcpy(target, we->data, we->size);
             return true;
         }
     }
     return false;
 }
 
-void map_free(struct map_t *map)
+void write_set_free(struct write_set_t *ws)
 {
-    if (unlikely(!map)) return;
-    free(map);
+    if (unlikely(!ws)) {
+        return;
+    }
+
+    // Iterate through all entries and free the dynamically allocated resources
+    for (size_t i = 0; i < ws->count; i++) {
+        write_entry_free(ws->entries[i]);
+    }
+
+    // Free the dynamically allocated array of pointers
+    free(ws->entries);
+
+    // Free the write_set_t structure
+    free(ws);
 }
 
-size_t map_size(struct map_t *map)
+size_t write_set_size(struct write_set_t *ws)
 {
-    return map->count;
+    return ws->count;
 }

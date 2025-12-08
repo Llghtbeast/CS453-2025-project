@@ -18,7 +18,7 @@ struct txn_t {
     version_clock_t r_version_clock;
     version_clock_t w_version_clock;
     struct set_t *r_set;
-    struct map_t *w_set;
+    struct write_set_t *w_set;
 };
 
 /**
@@ -62,7 +62,7 @@ bool txn_is_ro(tx_t tx);
  *
  * @param tx     Transaction identifier (may be `invalid_tx` for non-transactional
  *               reads depending on your design).
- * @param source Address within the region to read from.
+ * @param source Address within the shared region to read from.
  * @param size   Number of bytes to copy.
  * @param target Destination buffer (caller-allocated) to receive the data.
  * @return true on success; false on failure (e.g., invalid args, out-of-bounds,

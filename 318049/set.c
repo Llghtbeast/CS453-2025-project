@@ -26,7 +26,7 @@ bool set_add(struct set_t *set, void const *ptr)
 
 bool set_contains(struct set_t *set, void const *ptr) {
     if (unlikely(!set)) return false;
-    // Check if pointer already in map
+    // Check if pointer already in set
     for (size_t i = 0; i < set->count; i++) {
         if (set->addr_set[i] == ptr) return true;
     }

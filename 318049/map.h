@@ -7,53 +7,73 @@
 
 #include "macros.h"
 
-#define MAX_MAP_SIZE 100
+#define INITIAL_CAPACITY 8
+#define GROW_FACTOR 2
 
 /**
- * @brief Minimalist map implementation, TODO: improve once solution works.
+ * @brief write entry implementation. Implements a key-value pair with `target` as key and `(size, data)` as value.
+ * @param target pointer to target memory location where value should be written to.
+ * @param size   size of buffer to be written
+ * @param data   data to be written
  */
-struct map_t {
-    void const* sources[MAX_MAP_SIZE];
-    size_t sizes[MAX_MAP_SIZE];
-    void* targets[MAX_MAP_SIZE];
-    size_t count;
+struct write_entry_t {
+    void* target;
+    size_t size;
+    void* data;
 };
 
 /**
- * Initialize a map
- * @return Pointer to initialized map
+ * @brief write-set implementation, TODO: improve once solution works. (sort the elements progressively, use a tree, ...)
  */
-struct map_t *map_init();
+struct write_set_t {
+    struct write_entry_t** entries;
+    size_t count;
+    size_t capacity;
+};
+
+// ============== write_entry_t methods ============== 
+struct write_entry_t * write_entry_create(void const *source, size_t size, void *target);
+
+bool write_entry_update(struct write_entry_t *we, void const *source, size_t size);
+
+void write_entry_free(struct write_entry_t *we);
+
+// ============== write_set_t methods ============== 
+/**
+ * Initialize a write_set_t
+ * @return Pointer to initialized write_set
+ */
+struct write_set_t *write_set_init();
 
 /**
- * Add an element to the map.
- * @param map the map to add to
+ * Add an element to the write_set.
+ * @param ws the write_set to add to
  * @param source pointer to source write location
  * @param size size in bytes of value at source
  * @param target pointer to target write location
  * @return Whether the operation was a success
  */
-bool map_add(struct map_t* map, void const *source, size_t size, void* target);
+bool write_set_add(struct write_set_t* ws, void const *source, size_t size, void* target);
 
 /**
- * Check if a pointer is a key in this map
+ * Check if a pointer is a key in this write_set
  * TODO: Use a Bloom filter for this check
- * @param map the map to check the element belongs to
- * @param ptr the pointer to check belongs to map
- * @return Whether the pointer belongs to the map
+ * @param ws the write_set to check the element belongs to
+ * @param ptr the pointer to check belongs to write_set
+ * @return Whether the pointer belongs to the write_set
  */
-bool map_contains(struct map_t *map, void const *ptr);
+bool write_set_contains(struct write_set_t *ws, void *target);
 
 /**
- * Get an element to the map.
- * @param map the map to get from
+ * Get an element from the write_set.
+ * @param ws the write_set to get from
  * @param source pointer to source write location
  * @param size size in bytes of value at source
  * @param target pointer to target write location
  * @return Whether the operation was a success
  */
-bool map_get(struct map_t* map, void const *source, size_t size, void* target);
+bool write_set_get(struct write_set_t* ws, void const *source, size_t size, void* target);
 
-void map_free(struct map_t *map);
+void write_set_free(struct write_set_t *ws);
 
-size_t map_size(struct map_t *map);
+size_t write_set_size(struct write_set_t *ws);
