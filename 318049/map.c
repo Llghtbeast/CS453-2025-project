@@ -1,126 +1,158 @@
 #include "map.h"
 
-// ============== write_entry_t methods ============== 
-struct write_entry_t * write_entry_create(void const *source, size_t size, void *target)
-{
+// ============== entry_t methods ============== 
+struct entry_t *entry_create(void const *source) {}
+
+struct entry_t *entry_create(void const *source, size_t size, void *target) {
     // Allocate memory for struct
-    struct write_entry_t *we = malloc(sizeof(struct write_entry_t));
-    if (unlikely(!we)) return NULL;
+    struct entry_t *entry = malloc(sizeof(struct entry_t));
+    if (unlikely(!entry)) return NULL;
 
     // Try allocating memory for data 
-    we->data = malloc(size);
-    if (unlikely(!(we->data))) {
-        write_entry_free(we);
+    entry->data = malloc(size);
+    if (unlikely(!(entry->data))) {
+        entry_free(entry);
         return NULL;
     }
 
-    // Create write_entry
-    we->target = target;
-    we->size = size;
-    memcpy(we->data, source, size);
+    // Create entr
+    entry->target = target;
+    entry->size = size;
+    memcpy(entry->data, source, size);
 
-    return we;
+    return entry;
 }
 
-bool write_entry_update(struct write_entry_t *we, void const *source, size_t size)
-{
-    if (unlikely(!we)) return false;
-    if (size != we->size) return false;
+bool entry_update(struct entry_t *entry, void const *source, size_t size) {
+    if (unlikely(!entry)) return false;
+    if (size != entry->size) return false;
 
     // Update write entry
-    memcpy(we->data, source, size);
+    memcpy(entry->data, source, size);
+    return true;
 }
 
-void write_entry_free(struct write_entry_t *we)
-{
-    free(we->data);
-    free(we);
+void entry_free(struct entry_t *entry) {
+    free(entry->data);
+    free(entry);
 }
 
-// ============== write_set_t methods ============== 
-struct write_set_t *write_set_init()
-{
-    // Allocate memory for the write_set_t structure
-    struct write_set_t *ws = (struct write_set_t *)malloc(sizeof(struct write_set_t));
-    if (unlikely(!ws)) {
+// ============== set_t methods ============== 
+struct set_t *set_init() {
+    // Allocate memory for the set_t structure
+    struct set_t *set = (struct set_t *)malloc(sizeof(struct set_t));
+    if (unlikely(!set)) {
         return NULL;
     }
 
     // Initialize attributes
-    ws->count = 0;
-    ws->capacity = INITIAL_CAPACITY;
-    ws->entries = NULL;
+    set->count = 0;
+    set->capacity = INITIAL_CAPACITY;
+    set->entries = calloc(INITIAL_CAPACITY, sizeof(struct entry_t *));
   
-    return ws;
+    return set;
 }
 
-bool write_set_add(struct write_set_t *ws, void const *source, size_t size, void *target)
-{
-    if (unlikely(!ws)) return false;
+bool w_set_add(struct set_t *set, void const *source, size_t size, void *target) {
+    if (unlikely(!set)) return false;
 
-    // Check if pointer already in write_set
-    for (size_t i = 0; i < ws->count; i++) {
-        struct write_entry_t *entry = ws->entries[i];
+    // Check if pointer already in set
+    for (size_t i = 0; i < set->count; i++) {
+        struct entry_t *entry = set->entries[i];
         if (entry->target == target) {
-            write_entry_update(entry, source, size);
-            return true;
+            return entry_update(entry, source, size);
         }
     }
 
     // Increase capacity if needed
-    if (ws->count >= ws->capacity) {
-        ws->capacity *= GROW_FACTOR;
+    if (set->count >= set->capacity) {
+        if (!set_grow(set)) return false;
     }
 
     // Create a new write entry
-    struct write_entry_t *we = write_entry_create(source, size, target);
-    ws->entries[ws->count++] = we;
+    struct entry_t *entry = entry_create(source, size, target);
+    if (!entry) return false;  
+    set->entries[set->count++] = entry;
 
     return true;
 }
 
-bool write_set_contains(struct write_set_t *ws, void *target)
-{
-    if (unlikely(!ws)) return false;
-    // Check if pointer already in write_set
-    for (size_t i = 0; i < ws->count; i++) {
-        if (ws->entries[i]->target == target) return true;
+bool r_set_add(struct set_t *set, void const *source) {
+    if (unlikely(!set)) return false;
+
+    // Check if pointer already in set
+    for (size_t i = 0; i < set->count; i++) {
+        struct entry_t *entry = set->entries[i];
+        if (entry->target == target) {
+            return entry_update(entry, source, size);
+        }
+    }
+
+    // Check if there is enough space to add
+    if (set->count >= set->capacity) {
+        if (!set_grow(set)) return false;
+    }
+
+    // Create a new write entry
+    struct entry_t *entry = entry_create(source, size, target);
+    if (!entry) return false;  
+    set->entries[set->count++] = entry;
+
+    return true;
+}
+
+bool set_contains(struct set_t *set, void *target) {
+    if (unlikely(!set)) return false;
+    // Check if pointer already in set
+    for (size_t i = 0; i < set->count; i++) {
+        if (set->entries[i]->target == target) return true;
     }
     return false;
 }
 
-bool write_set_get(struct write_set_t *ws, void const *source, size_t size, void *target)
-{
-    for (size_t i = 0; i < ws->count; i++)
+bool set_read(struct set_t *set, void const *key, size_t size, void *dest) {
+    for (size_t i = 0; i < set->count; i++)
     {
-        struct write_entry_t *we = ws->entries[i];
-        if (we->target == source && we->size == size) {
-            memcpy(target, we->data, we->size);
+        struct entry_t *entry = set->entries[i];
+        if (entry->target == key && entry->size == size) {
+            memcpy(dest, entry->data, entry->size);
             return true;
         }
     }
     return false;
 }
 
-void write_set_free(struct write_set_t *ws)
-{
-    if (unlikely(!ws)) {
+void set_free(struct set_t *set) {
+    if (unlikely(!set)) {
         return;
     }
 
     // Iterate through all entries and free the dynamically allocated resources
-    for (size_t i = 0; i < ws->count; i++) {
-        write_entry_free(ws->entries[i]);
+    for (size_t i = 0; i < set->count; i++) {
+        entry_free(set->entries[i]);
     }
 
     // Free the dynamically allocated array of pointers
-    free(ws->entries);
+    free(set->entries);
 
-    // Free the write_set_t structure
-    free(ws);
+    // Free the set_t structure
+    free(set);
 }
 
-size_t write_set_size(struct write_set_t *ws)
-{
-    return ws->count;
+size_t set_size(struct set_t *set) {
+    return set->count;
+}
+
+bool set_grow(struct set_t *set) {
+    // Increase capacity if needed
+    size_t new_capacity = set->capacity * GROW_FACTOR;
+    // Allocate new memroy bloc of increased size
+    struct entry_t **new_entries = realloc(set->entries, new_capacity * sizeof(struct entry_t *));
+    if (!new_entries) {
+        return false;
+    }
+    set->entries = new_entries;
+    set->capacity = new_capacity;
+
+    return true;
 }
