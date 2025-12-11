@@ -7,6 +7,8 @@
 #include "tm.h"
 #include "macros.h"
 
+#define LOCKED -1
+
 /**
  * @brief A lock that can only be taken exclusively. Contrarily to shared locks,
  * exclusive locks have wait/wake_up capabilities.

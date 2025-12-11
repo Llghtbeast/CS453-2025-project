@@ -26,7 +26,7 @@ void v_lock_update(v_lock_t *lock, int new_val) {
 int v_lock_version(v_lock_t *lock) {
     int version = atomic_load(lock);
     // locked, return -1 (ERROR)
-    if (version & 0x1) return -1;
+    if (version & 0x1) return LOCKED;
     // unlocked, return version
     return version >> 1;
 }
