@@ -10,45 +10,87 @@
 #define INITIAL_CAPACITY 8
 #define GROW_FACTOR 2
 
+
+
 /**
- * @brief write/read set entry implementation. 
- * If contained in a read-set, only use the `target` attribute
- * If contained in a write-set, implements a key-value pair with `target` as key and `(size, data)` as value.
- * @param target pointer to target memory location where value should be written to.
+ * @brief Base entry for read/write sets.
+ * Read entries only use the target field.
+ * @param target pointer to target memory location
+ */
+struct base_entry_t {
+    void *target;
+};
+
+/**
+ * @brief Write entry extends base_entry_t with data to write.
+ * @param base   base entry containing target pointer
  * @param size   size of buffer to be written
  * @param data   data to be written
  */
-struct entry_t {
-    void* target;
-    size_t size;    // Not used in read-set
-    void* data;     // Not used in read-set
-};
+typedef struct write_entry_t {
+    struct base_entry_t base;
+    size_t size;
+    void *data;
+} write_entry_t;
+
+typedef struct base_entry_t read_entry_t;
 
 /**
  * @brief read/write set implementation.
  * TODO: improve once solution works. (sort the elements progressively, use a tree, ...)
  */
 struct set_t {
-    struct entry_t** entries;
+    struct base_entry_t** entries;
     size_t count;
     size_t capacity;
+    bool is_write_set;
 };
 
 // ============== entry_t methods ============== 
-struct entry_t *r_entry_create(void const *source);
+/**
+ * Create a read entry
+ * @param target pointer to target memory location
+ * @return Pointer to created read entry, NULL on failure
+ */
+read_entry_t *r_entry_create(void const *target);
 
-struct entry_t *w_entry_create(void const *source, size_t size, void *target);
+/**
+ * Create a write entry
+ * @param source pointer to source data
+ * @param size size in bytes of data
+ * @param target pointer to target memory location
+ * @return Pointer to created write entry, NULL on failure
+ */
+write_entry_t *w_entry_create(void const *source, size_t size, void *target);
 
-bool entry_update(struct entry_t *entry, void const *source, size_t size);
+/**
+ * Update a write entry's data
+ * @param entry write entry to update
+ * @param source pointer to new source data
+ * @param size size in bytes of new data
+ * @return Whether the operation was a success
+ */
+bool w_entry_update(write_entry_t *entry, void const *source, size_t size);
 
-void entry_free(struct entry_t *entry);
+/**
+ * Free a read entry
+ * @param entry entry to free
+ */
+void r_entry_free(read_entry_t *entry);
+
+/**
+ * Free a write entry (frees both data and entry)
+ * @param entry entry to free
+ */
+void w_entry_free(struct write_entry_t *entry);
 
 // ============== set_t methods ============== 
 /**
  * Initialize a set_t
+ * @param is_write_set whether this is a write set (true) or read set (false)
  * @return Pointer to initialized set
  */
-struct set_t *set_init();
+struct set_t *set_init(bool is_write_set);
 
 /**
  * Add an element to the write set.
@@ -63,10 +105,10 @@ bool w_set_add(struct set_t* set, void const *source, size_t size, void* target)
 /**
  * Add an element to the read set.
  * @param set the set to add to
- * @param source pointer to source write location
+ * @param target pointer to target read location
  * @return Whether the operation was a success
  */
-bool r_set_add(struct set_t* set, void const *source, size_t size, void* target);
+bool r_set_add(struct set_t* set, void* target);
 
 /**
  * Check if a pointer is a key in this set
@@ -87,8 +129,23 @@ bool set_contains(struct set_t *set, void *target);
  */
 bool set_read(struct set_t *set, void const *key, size_t size, void* dest);
 
+/**
+ * Free the set and all its entries
+ * @param set the set to free
+ */
 void set_free(struct set_t *set);
 
+
+/**
+ * Get the number of entries in the set
+ * @param set the set to query
+ * @return Number of entries
+ */
 size_t set_size(struct set_t *set);
 
+/**
+ * Grow the set capacity
+ * @param set the set to grow
+ * @return Whether the operation was a success
+ */
 bool set_grow(struct set_t *set);
