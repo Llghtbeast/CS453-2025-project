@@ -18,7 +18,7 @@ struct segment_node {
     struct segment_node* prev;
     struct segment_node* next;
     
-    struct v_lock_t lock;
+    v_lock_t lock;
 };
 typedef struct segment_node* segment_list;
 

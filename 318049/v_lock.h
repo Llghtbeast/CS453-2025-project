@@ -5,74 +5,46 @@
 #include <stdint.h>
 
 #include "tm.h"
+#include "macros.h"
 
 /**
  * @brief A lock that can only be taken exclusively. Contrarily to shared locks,
  * exclusive locks have wait/wake_up capabilities.
  */
-struct v_lock_t {
-    pthread_mutex_t mutex;
-    pthread_cond_t cv;
-    version_clock_t version_clock;
-    bool lock_bit;
-};
+typedef version_clock_t v_lock_t;
 
 /** 
  * Initialize the given lock.
  * @param lock Lock to initialize
  * @return Whether the operation is a success
 **/
-bool v_lock_init(struct v_lock_t* lock);
+bool v_lock_init(v_lock_t* lock);
 
 /** 
  * Clean up the given lock.
  * @param lock Lock to clean up
 **/
-void v_lock_cleanup(struct v_lock_t* lock);
-
-/** 
- * Test if the lock can be acquired
- * @param lock Lock to test
- * @return Whether the lock is acquirable (lock bit is false)
- */
-bool v_lock_test(struct v_lock_t* lock);
+void v_lock_cleanup(v_lock_t* lock);
 
 /**
- * Check the version of the lock
- * @param lock Lock whose version to check
- * @return version of the lock
- */
-version_clock_t v_lock_version(struct v_lock_t* lock);
-
-/** 
- * Wait and acquire the given lock.
+ * Try acquiring lock
  * @param lock Lock to acquire
- * @return Whether the operation is a success
-**/
-bool v_lock_acquire(struct v_lock_t* lock);
-
-/** 
- * Update the version clock of the lock
- * @param wv write version clock of process release write-lock
+ * @return true if lock was acquired, false otherwise
  */
-void v_lock_update_version(struct v_lock_t *lock, version_clock_t wv);
+bool v_lock_acquire(v_lock_t* lock);
 
-/** 
- * Release the given lock.
+/**
+ * Release lock
  * @param lock Lock to release
-**/
-void v_lock_release(struct v_lock_t *lock);
+ */
+void v_lock_release(v_lock_t* lock);
 
-/** 
- * Wait until woken up by a signal on the given lock.
- * The lock is released until lock_wait completes at which point it is acquired
- * again. Exclusive lock access is enforced.
- * @param lock Lock to release (until woken up) and wait on.
-**/
-void v_lock_wait(struct v_lock_t* lock);
+/**
+ * Update version of the lock
+ */
+void v_lock_update(v_lock_t* lock, int new_val);
 
-/** 
- * Wake up all threads waiting on the given lock.
- * @param lock Lock on which other threads are waiting.
-**/
-void v_lock_wake_up(struct v_lock_t* lock);
+/**
+ * Get version of the lock
+ */
+int v_lock_version(v_lock_t* lock);

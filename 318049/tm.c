@@ -115,8 +115,8 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
     t->is_ro = is_ro;
     t->r_version_clock = atomic_load(&(shared_to_ptr(shared)->version_clock)); // Should be an atomic read
     t->w_version_clock = 0;
-    t->r_set = set_init();
-    t->w_set = set_init();
+    t->r_set = set_init(false);
+    t->w_set = set_init(true);
 
     return (tx_t)t;
 }
@@ -192,8 +192,8 @@ bool tm_end(shared_t shared, tx_t tx) {
     // STEP 4: Write values of write set
     for (size_t i = 0; i < t->w_set->count; i++)
     {
-        struct entry_t *we = t->w_set->entries[i];
-        memcpy(we->target, we->data, we->size);
+        write_entry_t *we = t->w_set->entries[i];
+        memcpy(we->base.target, we->data, we->size);
     }
     
     // STEP 5: Update and release locks
