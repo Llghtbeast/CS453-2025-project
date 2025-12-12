@@ -2,18 +2,18 @@
 
 // ------- txn_end helper -------
 
-static bool txn_lock(struct txn_t *txn, shared_t shared);
+static bool txn_lock(struct set_t *ws);
 
 /**
  * @return Whether tx->rv + 1 == wv
  */
 static bool txn_set_wv(struct txn_t *txn, version_clock_t wv);
 
-static bool txn_validate_r_set(struct txn_t *txn, shared_t shared);
+static bool txn_validate_r_set(struct set_t *rs, int rv);
 
-static void txn_w_commit(struct txn_t *txn, shared_t shared);
+static void txn_w_commit(struct set_t *ws);
 
-static void txn_release(struct txn_t *txn, shared_t shared, bool committed);
+static void txn_unlock(struct set_t *ws, write_entry_t *last, int wv, bool committed);
 
 // ============================================= global functions =============================================
 
@@ -23,7 +23,7 @@ struct txn_t *txn_create(bool is_ro, int rv) {
 
     txn->is_ro = is_ro;
     txn->rv = rv;
-    txn->wv = -1;
+    txn->wv = ABORTED_TXN;
 
     txn->r_set = set_init(false);
     if (!txn->r_set) {
@@ -66,9 +66,9 @@ bool txn_read(struct txn_t *txn, void const *source, size_t size, void *target) 
     }
     
     // Post-validation: check if lock is free and has not changed. Else abort
-    struct v_lock_t *lock = &(((struct segment_node *) ((uintptr_t) source - sizeof(struct segment_node)))->lock);
+    struct v_lock_t *lock = &(((struct segment_node_t *) ((uintptr_t) source - sizeof(struct segment_node_t)))->lock);
     int version = v_lock_version(lock);
-    if (version == LOCKED || version > txn->rv) return false;
+    if (version == LOCKED || version > txn->rv) return ABORT;
 
     // If transaction is read-write, add address to read set
     if (!txn->is_ro) { set_add(txn->r_set, source); }
@@ -79,69 +79,49 @@ bool txn_write(struct txn_t *txn, void const *source, size_t size, void *target)
     return w_set_add(txn->w_set, source, size, target);
 }
 
-bool txn_end(struct txn_t *txn, shared_t shared) {
-    // If transaction is read write, perform additional steps
-    if (!txn->is_ro) {
-        // Lock the write-set (Go through region LL and lock if they are in the write set)
-        if (!txn_lock(txn, shared)) {
-            txn_free(txn);
-            return false;
-        }
+bool txn_end(struct txn_t *txn, struct region_t *region) {
+    // If transaction is read only or no writes occured (effectively read-only), directly commit
+    if (txn->is_ro || txn->w_set->count == 0) return COMMIT;
 
-        // Increment global version clock
-        version_clock_t wv = shared_update_version_clock(shared);
-        
-        if (!txn_set_wv(txn, wv)) {
-            // Validate the read set
-            if (!txn_validate_r_set(txn, shared)){
-                txn_release(txn, shared, false);
-                txn_free(txn);
-                return false;
-            } 
-        }
-        
-        // Commit
-        txn_w_commit(txn, shared);
-        
-        // Release locks
-        txn_release(txn, shared, true);
+    // If transaction is read write, perform additional steps
+    // Lock the write-set (Go through region LL and lock if they are in the write set)
+    if (!txn_lock(txn->w_set)) {
+        return ABORT;
     }
 
-    // Destroy the commited transaction
-    txn_free(txn);
-    return true;
+    // Increment global version clock
+    version_clock_t wv = region_update_version_clock(region);
+    
+    if (!txn_set_wv(txn, wv)) {
+        // Validate the read set
+        if (!txn_validate_r_set(txn->r_set, txn->rv)){
+            txn_unlock(txn->w_set, NULL, ABORTED_TXN, false);
+            return ABORT;
+        } 
+    }
+    
+    // Commit
+    txn_w_commit(txn->w_set);
+    
+    // Release locks and update their write version
+    txn_unlock(txn->w_set, NULL, wv, true);
+    return COMMIT;
 }
 
 // ============================================= static functions implementation =============================================
-static bool txn_lock(struct txn_t *txn, shared_t shared) {
-    struct shared *s = shared_to_ptr(shared);
-    struct segment_node *node = s->allocs;
-    
-    bool abort = false;
-    struct v_lock_t* acquired_locks[write_set_size(txn->w_set)];
-    size_t count = 0;
-    // Try acquiring all locks
-    while (node) {
-        if (txn_w_set_contains(txn, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            if (!v_lock_acquire(&(node->lock))) {
-                // Failed to acquire lock -> abort transaction
-                abort = true;
-                break;
-            }
-            else {
-                acquired_locks[count++] = &(node->lock);
-            }
-        }
-        node = node->next;
-    }
+static bool txn_lock(struct set_t *ws) {
+    for (size_t i = 0; i < ws->count; i++) {
+        // Extract corresponding memory location
+        write_entry_t *entry = ws->entries[i];
+        struct segment_node_t *node = ((uintptr_t) entry->base.target + sizeof(struct segment_node_t));
 
-    // If lock acquisition failed, need to release all acquired locks to avoid deadlock
-    if (abort) {
-        for (size_t i = 0; i < count; i++) {
-            v_lock_release(acquired_locks[i]);
+        if (!v_lock_acquire(&node->lock)) {
+            // Failed to acquire lock -> unlock acquired locks & abort transaction
+            txn_unlock(ws, entry, ABORTED_TXN, false);
+            return false;
         }
     }
-    return !abort;
+    return true;
 }
 
 static bool txn_set_wv(struct txn_t *txn, version_clock_t wv) {
@@ -149,49 +129,40 @@ static bool txn_set_wv(struct txn_t *txn, version_clock_t wv) {
     return txn->rv+1 == wv;
 }
 
-static bool txn_validate_r_set(struct txn_t *txn, shared_t shared) {
-    struct segment_node *node = shared_to_ptr(shared)->allocs;
+static bool txn_validate_r_set(struct set_t *rs, int rv) {
+    // Iterate through read set
+    for (size_t i = 0; i < rs->count; i++) {
+        read_entry_t *entry = rs->entries[i];
+        struct segment_node_t *node = ((uintptr_t) entry->target + sizeof(struct segment_node_t));
 
-    while (node) {
-        if (set_contains(txn->r_set, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            // If lock is not acquirable or the lock version clock is higher than tx->rv, abort.
-            if (v_lock_version(&(node->lock) != LOCKED) || 
-                v_lock_version(&(node->lock)) > txn->rv)
-            {
-                return false;
-            }
-        }        
-        node = node->next;
+        int lv = v_lock_version(&node->lock);
+        // If lock is not acquirable or the lock version clock is higher than tx->rv, abort.
+        if (lv & 0x1 || (lv >> 1) > rv) {
+            return false;
+        }
     }
     return true;
 }
 
-static void txn_w_commit(struct txn_t *txn, shared_t shared) {
-    struct segment_node *node = shared_to_ptr(shared)->allocs;
-
-    while (node) {
-        if (set_contains(txn->w_set, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            for (size_t i = 0; i < txn->w_set->count; i++)
-            {
-                write_entry_t *we = txn->w_set->entries[i];
-                memcpy(we->base.target, we->data, we->size);
-            }
-        }        
-        node = node->next;
+static void txn_w_commit(struct set_t *ws) {
+    // Iterate through write set
+    for (size_t i = 0; i < ws->count; i++) {
+        write_entry_t *we = ws->entries[i];
+        memcpy(we->base.target, we->data, we->size);
     }
 }
 
-static void txn_release(struct txn_t *txn, shared_t shared, bool committed) {
-    struct segment_node *node = shared_to_ptr(shared)->allocs;
-
-    while (node) {
-        if (set_contains(txn->w_set, (void*) ((uintptr_t) node + sizeof(struct segment_node)))) {
-            // If transaction has committed, update lock versions
-            if (committed) {
-                v_lock_update(&(node->lock), txn->wv);
-            }
-            v_lock_release(&(node->lock));
+static void txn_unlock(struct set_t *ws, write_entry_t *last, int wv, bool committed) {
+    for (size_t i = 0; i < ws->count; i++) {
+        // Extract corresponding memory location
+        write_entry_t *entry = ws->entries[i];
+        if (entry == last) return;      // only unlock locked memory regions
+        
+        struct segment_node_t *node = ((uintptr_t) entry->base.target + sizeof(struct segment_node_t));
+        // If transaction has committed, update lock versions
+        if (committed) {
+            v_lock_update(&(node->lock), wv);
         }
-        node = node->next;
+        v_lock_release(&(node->lock));
     }
 }

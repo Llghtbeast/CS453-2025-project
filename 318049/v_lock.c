@@ -1,6 +1,6 @@
 #include "v_lock.h"
 
-bool v_lock_init(v_lock_t *lock) {
+void v_lock_init(v_lock_t *lock) {
     atomic_init(lock, 0);
 }
 
@@ -29,4 +29,19 @@ int v_lock_version(v_lock_t *lock) {
     if (version & 0x1) return LOCKED;
     // unlocked, return version
     return version >> 1;
+}
+
+// =========== Global clock functions =========== 
+void global_clock_init(global_clock_t *global_clock) {
+    atomic_init(global_clock, 0);
+}
+
+void global_clock_cleanup(global_clock_t *global_clock) { return; }
+
+int global_clock_load(global_clock_t *global_clock) {
+    return atomic_load(global_clock);
+}
+
+int global_clock_increment_and_fetch(global_clock_t *global_clock) {
+    return atomic_fetch_add(global_clock, 1);
 }

@@ -36,14 +36,18 @@
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
 shared_t tm_create(size_t size, size_t align) {
-    return shared_create(size, align);
+    struct region_t *region = region_create(size, align);
+    // If shared memory region allocation failed, return invalid_shared
+    if (!region) return invalid_shared;
+
+    return (shared_t) region;
 }
 
 /** Destroy (i.e. clean-up + free) a given shared memory region.
  * @param shared Shared memory region to destroy, with no running transaction
 **/
 void tm_destroy(shared_t shared) {
-    shared_destroy(shared);
+    region_destroy((struct region_t *)shared);
 }
 
 /** [thread-safe] Return the start address of the first allocated segment in the shared memory region.
@@ -51,7 +55,7 @@ void tm_destroy(shared_t shared) {
  * @return Start address of the first allocated segment
 **/
 void* tm_start(shared_t shared) {
-    return shared_start(shared);
+    return region_start((struct region_t *) shared);
 }
 
 /** [thread-safe] Return the size (in bytes) of the first allocated segment of the shared memory region.
@@ -59,7 +63,7 @@ void* tm_start(shared_t shared) {
  * @return First allocated segment size
  **/
 size_t tm_size(shared_t shared) {
-    return shared_size(shared);
+    return region_size((struct region_t *) shared);
 }
 
 /** [thread-safe] Return the alignment (in bytes) of the memory accesses on the given shared memory region.
@@ -67,7 +71,7 @@ size_t tm_size(shared_t shared) {
  * @return Alignment used globally
  **/
 size_t tm_align(shared_t shared) {
-    return shared_align(shared);
+    return region_align((struct region_t *) shared);
 }
 
 /** [thread-safe] Begin a new transaction on the given shared memory region.
@@ -76,7 +80,13 @@ size_t tm_align(shared_t shared) {
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) {
-    return txn_create(is_ro, shared);
+    struct region_t *region = (struct region *) shared;
+    struct txn_t *txn = txn_create(is_ro, shared);
+
+    // If transaction creation failed, return invalid_tx
+    if (!txn) return invalid_tx;
+
+    return (tx_t) txn;
 }
 
 /** [thread-safe] End the given transaction.
@@ -85,7 +95,15 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
  * @return Whether the whole transaction committed
 **/
 bool tm_end(shared_t shared, tx_t tx) {
-    return txn_end(tx, shared);
+    struct txn_t *txn = (struct txn_t *) tx;
+    struct region_t *region = (struct region_t *) shared;
+
+    // Try committing transaction
+    bool result = txn_end(txn, region);
+
+    // Free transaction and return
+    txn_free(txn);
+    return result;
 }
 
 /** [thread-safe] Read operation in the given transaction, source in the shared region and target in a private region.
@@ -97,7 +115,7 @@ bool tm_end(shared_t shared, tx_t tx) {
  * @return Whether the whole transaction can continue
 **/
 bool tm_read(shared_t unused(shared), tx_t tx, void const* source, size_t size, void* target) {
-    return txn_read(tx, source, size, target);
+    return txn_read((struct txn_t *) tx, source, size, target);
 }
 
 /** [thread-safe] Write operation in the given transaction, source in a private region and target in the shared region.
@@ -109,7 +127,7 @@ bool tm_read(shared_t unused(shared), tx_t tx, void const* source, size_t size, 
  * @return Whether the whole transaction can continue
 **/
 bool tm_write(shared_t unused(shared), tx_t tx, void const* source, size_t size, void* target) {
-    return txn_write(tx, source, size, target);
+    return txn_write((struct txn_t *) tx, source, size, target);
 }
 
 /** [thread-safe] Memory allocation in the given transaction.
@@ -120,7 +138,7 @@ bool tm_write(shared_t unused(shared), tx_t tx, void const* source, size_t size,
  * @return Whether the whole transaction can continue (success/nomem), or not (abort_alloc)
 **/
 alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
-    return shared_alloc(shared, size, target);
+    return region_alloc((struct region_t *) shared, size, target);
 }
 
 /** [thread-safe] Memory freeing in the given transaction.
@@ -130,5 +148,5 @@ alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
  * @return Whether the whole transaction can continue
 **/
 bool tm_free(shared_t shared, tx_t unused(tx), void* target) {
-    return shared_free(shared, target);
+    return region_free((struct region_t *) shared, target);
 }

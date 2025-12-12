@@ -14,16 +14,16 @@
 /**
  * @brief List of dynamically allocated segments.
  */
-struct segment_node {
-    struct segment_node* prev;
-    struct segment_node* next;
+struct segment_node_t {
+    struct segment_node_t* prev;
+    struct segment_node_t* next;
     
     v_lock_t lock;
 };
-typedef struct segment_node* segment_list;
+typedef struct segment_node_t* segment_list;
 
-struct shared {
-    atomic_version_clock version_clock;
+struct region_t {
+    version_clock_t version_clock;
     
     void* start;
     size_t size;
@@ -32,20 +32,18 @@ struct shared {
     segment_list allocs;
 };
 
-struct shared * shared_to_ptr(shared_t shared);
+struct region_t *region_create(size_t size, size_t align);
 
-shared_t shared_create(size_t size, size_t align);
+void region_destroy(struct region_t *);
 
-void shared_destroy(shared_t shared);
+void* region_start(struct region_t *);
 
-void* shared_start(shared_t shared);
+size_t region_size(struct region_t *);
 
-size_t shared_size(shared_t shared);
+size_t region_align(struct region_t *);
 
-size_t shared_align(shared_t shared);
+version_clock_t region_update_version_clock(struct region_t *);
 
-version_clock_t shared_update_version_clock(shared_t shared);
+alloc_t region_alloc(struct region_t *, size_t size, void** target);
 
-alloc_t shared_alloc(shared_t shared, size_t size, void** target);
-
-bool shared_free(shared_t shared, void* target);
+bool region_free(struct region_t *, void* target);

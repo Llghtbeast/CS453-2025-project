@@ -12,6 +12,10 @@
 #include "macros.h"
 #include "shared.h"
 
+#define ABORT false
+#define COMMIT true
+#define ABORTED_TXN -1
+
 struct txn_t {
     bool is_ro;
     int rv;
@@ -91,4 +95,4 @@ bool txn_write(struct txn_t *txn, void const *source, size_t size, void *target)
  * @param tx     Transaction to end
  * @return Whether the whole transaction committed
  **/
-bool txn_end(struct txn_t *txn, shared_t shared);
+bool txn_end(struct txn_t *txn, struct region_t *);

@@ -48,7 +48,6 @@ static alloc_t const abort_alloc   = 1; // TX was aborted and could be retried
 static alloc_t const nomem_alloc   = 2; // Memory allocation failed but TX was not aborted
 
 typedef atomic_int version_clock_t; // The type of the version clock
-typedef _Atomic version_clock_t atomic_version_clock; // the atomic version clock variables
 
 // -------------------------------------------------------------------------- //
 
