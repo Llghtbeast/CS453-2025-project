@@ -23,7 +23,7 @@ struct txn_t *txn_create(bool is_ro, int rv) {
 
     txn->is_ro = is_ro;
     txn->rv = rv;
-    txn->wv = ABORTED_TXN;
+    txn->wv = -1;
 
     txn->r_set = set_init(false);
     if (!txn->r_set) {
@@ -58,6 +58,8 @@ bool txn_read(struct txn_t *txn, void const *source, size_t size, void *target) 
         memcpy(target, source, size);
     }
     else {
+        
+        if (set_contains(txn->w_set, target))
         // write_set_get will write to target if the write set contains the target
         if (!write_set_get(txn->w_set, target, size, source)) {
             // If write set does not contain the source, write

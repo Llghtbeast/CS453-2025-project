@@ -138,7 +138,11 @@ bool tm_write(shared_t unused(shared), tx_t tx, void const* source, size_t size,
  * @return Whether the whole transaction can continue (success/nomem), or not (abort_alloc)
 **/
 alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
-    return region_alloc((struct region_t *) shared, size, target);
+    struct segment_node_t *node = region_alloc((struct region_t *) shared, size);
+    if (!node) return nomem_alloc;
+
+    *target = (void *) node;
+    return success_alloc;
 }
 
 /** [thread-safe] Memory freeing in the given transaction.
@@ -148,5 +152,8 @@ alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
  * @return Whether the whole transaction can continue
 **/
 bool tm_free(shared_t shared, tx_t unused(tx), void* target) {
-    return region_free((struct region_t *) shared, target);
+    struct region_t *region = (struct region_t *) shared;
+    struct segment_node_t *node = (struct segment_node_t *) target;
+    
+    return region_free(region, node);
 }

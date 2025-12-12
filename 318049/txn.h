@@ -21,6 +21,7 @@ struct txn_t {
     int rv;
     int wv;
 
+    // Read and write sets. Contain target address (struct segment_node_t *), data and size of data to be written
     struct set_t *r_set;
     struct set_t *w_set;
 };
