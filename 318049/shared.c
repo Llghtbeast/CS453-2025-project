@@ -1,46 +1,12 @@
 #include "shared.h"
 
-struct segment_node_t *segment_init(size_t size, size_t align) {
-    struct segment_node_t *node = malloc(sizeof(struct segment_node_t));
-    if (unlikely(!node)) return NULL;
-    if (unlikely(posix_memalign(&node->data, align, size))) {
-        free(node);
-        return NULL;
-    }
-
-    node->size = size;
-    memset(node->data, 0, size);
-    
-    // Allocate space for locks
-    node->locks = calloc(size / align, sizeof(v_lock_t));
-    if (unlikely(!node->locks)) {
-        free(node->data);
-        free(node);
-        return NULL;
-    }
-    // Init locks
-    for (size_t i = 0; i < size/align; i++) {
-        v_lock_init(&node->locks[i]);
-    }
-    
-    return node;
-}
-
-void segment_free(struct segment_node_t *node) {
-    free(node->locks);
-    free(node->data);
-    free(node);
-}
-
-// ============ Shared region methods ============
 struct region_t *region_create(size_t size, size_t align) {
     struct region_t* region = (struct region_t*) malloc(sizeof(struct region_t));
     if (unlikely(!region)) {
         return NULL;
     }
-    // Allocate initial non-free-able segment
-    struct segment_node_t *node = segment_init(size, align);
-    if (unlikely(!node)) {
+    // Allocate and align start memory region
+    if (unlikely(posix_memalign(region->start, align, size))) {
         free(region);
         return NULL;
     }

@@ -6,10 +6,13 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "v_lock.h"
 #include "tm.h"
 #include "macros.h"
+
+#define VLOCK_NUM 2<<20
 
 /**
  * @brief Segment of shared memory.
@@ -17,23 +20,17 @@
 struct segment_node_t {
     struct segment_node_t* prev;
     struct segment_node_t* next;
-
-    size_t size;
-    void* data;
-    v_lock_t** locks;
 };
 typedef struct segment_node_t* segment_list;
-
-struct segment_node_t *segment_init(size_t size, size_t align);
-
-void segment_free(struct segment_node_t *node);
 
 // ============ Shared region ============ 
 /**
  * @brief List of shared memory segments
  */
 struct region_t {
-    version_clock_t version_clock;
+    pthread_mutex_t alloc_lock;     // Lock to seize when allocating new memory block
+    v_lock_t v_locks[VLOCK_NUM];    // Lock to acquire when writing to corresponding word in memory
+    version_clock_t version_clock;  // Global version lock
     
     void* start;
     size_t align;
