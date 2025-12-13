@@ -33,6 +33,7 @@ struct region_t {
     version_clock_t version_clock;  // Global version lock
     
     void* start;
+    size_t size;
     size_t align;
     
     segment_list allocs;
@@ -51,6 +52,6 @@ size_t region_align(struct region_t *);
 
 int region_update_version_clock(struct region_t *);
 
-struct segment_node_t * region_alloc(struct region_t *, size_t size);
+struct segment_node_t *region_alloc(struct region_t *, size_t size);
 
 bool region_free(struct region_t *, struct segment_node_t *node);

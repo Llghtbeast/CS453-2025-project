@@ -45,3 +45,20 @@ int global_clock_load(global_clock_t *global_clock) {
 int global_clock_increment_and_fetch(global_clock_t *global_clock) {
     return atomic_fetch_add(global_clock, 1);
 }
+
+// =========== Segment allocation lock functions =========== 
+int alloc_mutex_init(alloc_mutex_t *lock) {
+    return pthread_mutex_init(lock, NULL);
+}
+
+int alloc_mutex_cleanup(alloc_mutex_t *lock) {
+    return pthread_mutex_destroy(lock);
+}
+
+int alloc_mutex_acquire(alloc_mutex_t *lock) {
+    return pthread_mutex_lock(lock);
+}
+
+int alloc_mutex_release(alloc_mutex_t *lock) {
+    return pthread_mutex_lock(lock);
+}

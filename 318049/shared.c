@@ -5,26 +5,51 @@ struct region_t *region_create(size_t size, size_t align) {
     if (unlikely(!region)) {
         return NULL;
     }
-    // Allocate and align start memory region
-    if (unlikely(posix_memalign(region->start, align, size))) {
+
+    // We allocate the region memory buffer such that its words are correctly aligned.
+    if (unlikely(posix_memalign(&(region->start), align, size))) {
         free(region);
         return NULL;
     }
 
+    // Initialize the segment allocation lock
+    if (unlikely(alloc_mutex_init(&region->alloc_lock))) {
+        free(region->start);
+        free(region);
+        return NULL;
+    }
+
+    // Init the global version lock
     global_clock_init(region->version_clock);
-    region->start       = node->data;
+    
+    // Init the memory locks
+    for (size_t i = 0; i < VLOCK_NUM; i++) {
+        v_lock_init(&region->v_locks[i]);
+    }
+    
+    memset(region->start, 0, size);
+    region->allocs      = NULL;
+    region->size        = size;
     region->align       = align;
-    region->allocs      = node;
-    region->last        = node;
     return region;
 }
 
 void region_destroy(struct region_t *region) {
-    while (region->allocs) { // Free allocated segments
+    // Free allocated segments
+    while (region->allocs) { 
         segment_list tail = region->allocs->next;
-        segment_free(region->allocs);
+        free(region->allocs);
         region->allocs = tail;
     }
+
+    // Cleanup locks
+    global_clock_cleanup(&region->version_clock);
+    alloc_mutex_cleanup(&region->alloc_lock);
+    for (size_t i = 0; i < VLOCK_NUM; i++) {
+        v_lock_cleanup(&region->v_locks[i]);
+    }
+    
+    // Free initial memory region
     free(region->start);
     free(region);
 }
@@ -34,7 +59,7 @@ void* region_start(struct region_t *region) {
 }
 
 size_t region_size(struct region_t *region) {
-    return region->allocs->size;
+    return region->size;
 }
 
 size_t region_align(struct region_t *region) {
@@ -46,31 +71,32 @@ int region_update_version_clock(struct region_t *region) {
 }
 
 struct segment_node_t *region_alloc(struct region_t *region, size_t size) {
-    // size_t align = region->align;
-    // align = align < sizeof(struct segment_node_t*) ? sizeof(void*) : align;
+    size_t align = region->align;
+    align = align < sizeof(struct segment_node_t*) ? sizeof(void*) : align;
 
-    struct segment_node_t* node = segment_init(size, region->align);
-    if (unlikely(!node)) {
+    struct segment_node_t* node;
+    if (unlikely(posix_memalign((void**)&node, align, sizeof(struct segment_node_t) + size) != 0)) // Allocation failed
         return NULL;
-    }
 
     // Insert in the linked list
-    node->next = NULL;
-    node->prev = region->last;
-    region->last->next = node;
-    region->last = node;
+    alloc_mutex_acquire(&region->alloc_lock);
+    node->prev = NULL;
+    node->next = region->allocs;
+    if (node->next) node->next->prev = node;
+    region->allocs = node;
+    alloc_mutex_release(&region->alloc_lock);
 
     return node;
 }
 
 bool region_free(struct region_t *region, struct segment_node_t *node) {
-    if (unlikely(!region || !node)) return false;
-    
     // Remove from the linked list
-    if (region->last == node) region->last = node->prev;
+    alloc_mutex_acquire(&region->alloc_lock);
     if (node->prev) node->prev->next = node->next;
+    else region->allocs = node->next;
     if (node->next) node->next->prev = node->prev;
+    alloc_mutex_release(&region->alloc_lock);
 
-    segment_free(node);
+    free(node);
     return true;
 }

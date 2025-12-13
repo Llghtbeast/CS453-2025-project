@@ -141,7 +141,12 @@ alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
     struct segment_node_t *node = region_alloc((struct region_t *) shared, size);
     if (!node) return nomem_alloc;
 
-    *target = (void *) node;
+    // create pointer to start of memory region
+    void *data = (void *) ((uintptr_t) node + sizeof(struct segment_node_t));
+    memset(data, 0, size);
+
+    // Set target to newly allocated memory region
+    *target =  data;
     return success_alloc;
 }
 
@@ -153,7 +158,7 @@ alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
 **/
 bool tm_free(shared_t shared, tx_t unused(tx), void* target) {
     struct region_t *region = (struct region_t *) shared;
-    struct segment_node_t *node = (struct segment_node_t *) target;
+    struct segment_node_t* node = (struct segment_node_t*) ((uintptr_t) target - sizeof(struct segment_node_t));
     
     return region_free(region, node);
 }
