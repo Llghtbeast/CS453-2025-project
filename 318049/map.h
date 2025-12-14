@@ -18,7 +18,7 @@
  * @param target pointer to target memory location
  */
 struct base_entry_t {
-    void const *target;
+    void *target;
 };
 
 /**
@@ -52,7 +52,7 @@ struct set_t {
  * @param target pointer to target memory location
  * @return Pointer to created read entry, NULL on failure
  */
-read_entry_t *r_entry_create(void const *target);
+read_entry_t *r_entry_create(void *target);
 
 /**
  * Create a write entry
@@ -120,9 +120,9 @@ bool r_set_add(struct set_t* set, void* target);
 bool set_contains(struct set_t *set, void *target);
 
 /**
- * Get pointer to entry with key target, else NULL
+ * Get pointer to entry with key key, else NULL
  */
-struct base_entry_t *set_get(struct set_t *set, void *target);
+struct base_entry_t *set_get(struct set_t *set, void *key);
 /**
  * Read an element from the set.
  * @param set the set to get from

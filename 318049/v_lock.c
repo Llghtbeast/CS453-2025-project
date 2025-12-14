@@ -36,7 +36,7 @@ void global_clock_init(global_clock_t *global_clock) {
     atomic_init(global_clock, 0);
 }
 
-void global_clock_cleanup(global_clock_t *global_clock) { return; }
+void global_clock_cleanup(global_clock_t * unused(global_clock)) { return; }
 
 int global_clock_load(global_clock_t *global_clock) {
     return atomic_load(global_clock);

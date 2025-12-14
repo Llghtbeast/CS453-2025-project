@@ -182,7 +182,7 @@ static void txn_w_commit(struct set_t *ws) {
 static void txn_unlock(struct region_t *region, struct set_t *ws, write_entry_t *last, int wv, bool committed) {    
     for (size_t i = 0; i < ws->count; i++) {
         // Extract corresponding memory location
-        write_entry_t *entry = ws->entries[i];
+        write_entry_t *entry = (write_entry_t *) ws->entries[i];
         if (entry == last) return;      // only unlock locked memory regions
         
         v_lock_t *lock = region_get_memory_lock(region, entry->base.target);

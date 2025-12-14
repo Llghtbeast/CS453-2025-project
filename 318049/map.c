@@ -1,7 +1,7 @@
 #include "map.h"
 
 // ============== entry_t methods ============== 
-read_entry_t *r_entry_create(void const *target) {
+read_entry_t *r_entry_create(void *target) {
     // Allocate memory for struct
     read_entry_t *entry = malloc(sizeof(read_entry_t));
     if (unlikely(!entry)) return NULL;
@@ -129,11 +129,11 @@ bool set_contains(struct set_t *set, void *target) {
     return false;
 }
 
-struct base_entry_t *set_get(struct set_t *set, void *target) {
+struct base_entry_t *set_get(struct set_t *set, void *key) {
     if (unlikely(!set)) return NULL;
     // Check if pointer already in set
     for (size_t i = 0; i < set->count; i++) {
-        if (set->entries[i]->target == target) return set->entries[i];
+        if (set->entries[i]->target == key) return set->entries[i];
     }
     return NULL;
 }
