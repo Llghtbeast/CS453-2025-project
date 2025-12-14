@@ -18,7 +18,7 @@
  * @param target pointer to target memory location
  */
 struct base_entry_t {
-    void *target;
+    void const *target;
 };
 
 /**

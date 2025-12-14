@@ -30,7 +30,7 @@ typedef struct segment_node_t* segment_list;
 struct region_t {
     pthread_mutex_t alloc_lock;     // Lock to seize when allocating new memory block
     v_lock_t v_locks[VLOCK_NUM];    // Lock to acquire when writing to corresponding word in memory
-    version_clock_t version_clock;  // Global version lock
+    global_clock_t version_clock;  // Global version lock
     
     void* start;
     size_t size;

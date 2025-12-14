@@ -80,7 +80,7 @@ size_t tm_align(shared_t shared) {
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) {
-    struct region_t *region = (struct region *) shared;
+    struct region_t *region = (struct region_t *) shared;
     struct txn_t *txn = txn_create(is_ro, global_clock_load(&region->version_clock));
 
     // If transaction creation failed, return invalid_tx
@@ -126,8 +126,8 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
  * @param target Target start address (in the shared region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_write(shared_t unused(shared), tx_t tx, void const* source, size_t size, void* target) {
-    return txn_write((struct txn_t *) tx, source, size, target);
+bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
+    return txn_write((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
 }
 
 /** [thread-safe] Memory allocation in the given transaction.

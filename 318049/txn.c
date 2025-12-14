@@ -139,12 +139,12 @@ bool txn_end(struct txn_t *txn, struct region_t *region) {
 static bool txn_lock(struct region_t *region, struct set_t *ws) {
     for (size_t i = 0; i < ws->count; i++) {
         // Extract corresponding memory location
-        write_entry_t *entry = ws->entries[i];
+        write_entry_t *entry = (write_entry_t *)ws->entries[i];
 
         v_lock_t *lock = region_get_memory_lock(region, entry->base.target);
         if (!v_lock_acquire(lock)) {
             // Failed to acquire lock -> unlock acquired locks & abort transaction
-            txn_unlock(ws, region, entry, INVALID, false);
+            txn_unlock(region, ws, entry, INVALID, false);
             return ABORT;
         }
     }
@@ -174,7 +174,7 @@ static bool txn_validate_r_set(struct region_t *region, struct set_t *rs, int rv
 static void txn_w_commit(struct set_t *ws) {
     // Iterate through write set and write values
     for (size_t i = 0; i < ws->count; i++) {
-        write_entry_t *we = ws->entries[i];
+        write_entry_t *we = (write_entry_t *) ws->entries[i];
         memcpy(we->base.target, we->data, we->size);
     }
 }

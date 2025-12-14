@@ -20,7 +20,7 @@ struct region_t *region_create(size_t size, size_t align) {
     }
 
     // Init the global version lock
-    global_clock_init(region->version_clock);
+    global_clock_init(&region->version_clock);
     
     // Init the memory locks
     for (size_t i = 0; i < VLOCK_NUM; i++) {
@@ -101,6 +101,6 @@ bool region_free(struct region_t *region, struct segment_node_t *node) {
     return true;
 }
 
-v_lock_t *region_get_memory_lock(struct region_t *region, void *addr) {
+v_lock_t *region_get_memory_lock(struct region_t *region, void const *addr) {
     return &region->v_locks[(uintptr_t) addr % VLOCK_NUM];
 }

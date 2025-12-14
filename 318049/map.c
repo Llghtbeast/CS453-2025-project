@@ -180,7 +180,7 @@ size_t set_size(struct set_t *set) {
 bool set_grow(struct set_t *set) {
     size_t new_capacity = set->capacity * GROW_FACTOR;
     // Allocate new memroy bloc of increased size
-    struct entry_t **new_entries = realloc(set->entries, new_capacity * sizeof(struct base_entry_t *));
+    struct base_entry_t **new_entries = (struct base_entry_t **) realloc(set->entries, new_capacity * sizeof(struct base_entry_t *));
     if (!new_entries) {
         return false;
     }
