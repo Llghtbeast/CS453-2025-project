@@ -2,18 +2,18 @@
 
 // ------- txn_end helper -------
 
-static bool txn_lock(struct set_t *ws);
+static bool txn_lock(struct region_t *region, struct set_t *ws);
 
 /**
  * @return Whether tx->rv + 1 == wv
  */
-static bool txn_set_wv(struct txn_t *txn, version_clock_t wv);
+static bool txn_set_wv(struct txn_t *txn, int wv);
 
-static bool txn_validate_r_set(struct set_t *rs, int rv);
+static bool txn_validate_r_set(struct region_t *region, struct set_t *rs, int rv);
 
 static void txn_w_commit(struct set_t *ws);
 
-static void txn_unlock(struct set_t *ws, write_entry_t *last, int wv, bool committed);
+static void txn_unlock(struct region_t *region, struct set_t *ws, write_entry_t *last, int wv, bool committed);
 
 // ============================================= global functions =============================================
 
@@ -23,7 +23,7 @@ struct txn_t *txn_create(bool is_ro, int rv) {
 
     txn->is_ro = is_ro;
     txn->rv = rv;
-    txn->wv = -1;
+    txn->wv = INVALID;       // invalid write version
 
     txn->r_set = set_init(false);
     if (!txn->r_set) {
@@ -52,33 +52,58 @@ bool txn_is_ro(struct txn_t * txn) {
     return txn->is_ro;
 }
 
-bool txn_read(struct txn_t *txn, void const *source, size_t size, void *target) {
-    // Check if transaction is read-only
-    if (txn->is_ro) {
-        memcpy(target, source, size);
-    }
-    else {
-        
-        if (set_contains(txn->w_set, target))
-        // write_set_get will write to target if the write set contains the target
-        if (!write_set_get(txn->w_set, target, size, source)) {
-            // If write set does not contain the source, write
-            memcpy(target, source, size);
+bool txn_read(struct txn_t *txn, struct region_t *region, void const *source, size_t size, void *target) {
+    size_t word_size = region->align;
+   
+    for (size_t i = 0; i < size; i += word_size) {
+        void *source_addr = (char *)source +i;
+        void *target_addr = (char *)target +i;
+
+        if (txn->is_ro) {
+            // Check if address has been written to during this trasaction
+            write_entry_t *entry = (write_entry_t *) set_get(txn->w_set, source_addr);
+            if (entry) {
+                memcpy(target_addr, entry->data, word_size);
+                continue;
+            }
+        }
+
+        // Determine lock associated to shared memory region
+        v_lock_t *lock = region_get_memory_lock(region, source_addr);
+
+        // Verify lock is free (without acquiring it)
+        int lv_pre = v_lock_version(lock);
+        if (lv_pre == LOCKED || lv_pre > txn->rv) return ABORT; // Abort (maybe should cleanup transaction directly?)
+
+        memcpy(target_addr, source_addr, word_size);
+
+        // Lock post-validation
+        int lv_post = v_lock_version(lock);
+        if (lv_post == LOCKED || lv_post != lv_pre) return ABORT; // Abort (maybe should cleanup transaction directly?)
+
+        if (txn->is_ro) {
+            // Add to read set
+            if (unlikely(!r_set_add(txn->r_set, source_addr))) {
+                return ABORT;
+            }
         }
     }
-    
-    // Post-validation: check if lock is free and has not changed. Else abort
-    struct v_lock_t *lock = &(((struct segment_node_t *) ((uintptr_t) source - sizeof(struct segment_node_t)))->lock);
-    int version = v_lock_version(lock);
-    if (version == LOCKED || version > txn->rv) return ABORT;
-
-    // If transaction is read-write, add address to read set
-    if (!txn->is_ro) { set_add(txn->r_set, source); }
-    return true;
+    return COMMIT;
 }
 
-bool txn_write(struct txn_t *txn, void const *source, size_t size, void *target) {
-    return w_set_add(txn->w_set, source, size, target);
+bool txn_write(struct txn_t *txn, struct region_t *region, void const *source, size_t size, void *target) {
+    size_t word_size = region->align;
+   
+    for (size_t i = 0; i < size; i += word_size) {
+        void *source_addr = (char *)source +i;
+        void *target_addr = (char *)target +i;
+
+        // Add to write set
+        if (unlikely(!w_set_add(txn->w_set, source_addr, word_size, target_addr))) {
+            return ABORT;
+        }
+    }
+    return COMMIT;
 }
 
 bool txn_end(struct txn_t *txn, struct region_t *region) {
@@ -87,17 +112,17 @@ bool txn_end(struct txn_t *txn, struct region_t *region) {
 
     // If transaction is read write, perform additional steps
     // Lock the write-set (Go through region LL and lock if they are in the write set)
-    if (!txn_lock(txn->w_set)) {
+    if (!txn_lock(region, txn->w_set)) {
         return ABORT;
     }
 
     // Increment global version clock
-    version_clock_t wv = region_update_version_clock(region);
+    int wv = region_update_version_clock(region);
     
     if (!txn_set_wv(txn, wv)) {
         // Validate the read set
-        if (!txn_validate_r_set(txn->r_set, txn->rv)){
-            txn_unlock(txn->w_set, NULL, ABORTED_TXN, false);
+        if (!txn_validate_r_set(region, txn->r_set, txn->rv)){
+            txn_unlock(region, txn->w_set, NULL, INVALID, false);
             return ABORT;
         } 
     }
@@ -106,40 +131,40 @@ bool txn_end(struct txn_t *txn, struct region_t *region) {
     txn_w_commit(txn->w_set);
     
     // Release locks and update their write version
-    txn_unlock(txn->w_set, NULL, wv, true);
+    txn_unlock(region, txn->w_set, NULL, wv, true);
     return COMMIT;
 }
 
 // ============================================= static functions implementation =============================================
-static bool txn_lock(struct set_t *ws) {
+static bool txn_lock(struct region_t *region, struct set_t *ws) {
     for (size_t i = 0; i < ws->count; i++) {
         // Extract corresponding memory location
         write_entry_t *entry = ws->entries[i];
-        struct segment_node_t *node = ((uintptr_t) entry->base.target + sizeof(struct segment_node_t));
 
-        if (!v_lock_acquire(&node->lock)) {
+        v_lock_t *lock = region_get_memory_lock(region, entry->base.target);
+        if (!v_lock_acquire(lock)) {
             // Failed to acquire lock -> unlock acquired locks & abort transaction
-            txn_unlock(ws, entry, ABORTED_TXN, false);
-            return false;
+            txn_unlock(ws, region, entry, INVALID, false);
+            return ABORT;
         }
     }
     return true;
 }
 
-static bool txn_set_wv(struct txn_t *txn, version_clock_t wv) {
+static bool txn_set_wv(struct txn_t *txn, int wv) {
     txn->wv = wv;
     return txn->rv+1 == wv;
 }
 
-static bool txn_validate_r_set(struct set_t *rs, int rv) {
+static bool txn_validate_r_set(struct region_t *region, struct set_t *rs, int rv) {
     // Iterate through read set
     for (size_t i = 0; i < rs->count; i++) {
         read_entry_t *entry = rs->entries[i];
-        struct segment_node_t *node = ((uintptr_t) entry->target + sizeof(struct segment_node_t));
+        v_lock_t *lock = region_get_memory_lock(region, entry->target);
 
-        int lv = v_lock_version(&node->lock);
+        int lv = v_lock_version(lock);
         // If lock is not acquirable or the lock version clock is higher than tx->rv, abort.
-        if (lv & 0x1 || (lv >> 1) > rv) {
+        if (lv == LOCKED || lv > rv) {
             return false;
         }
     }
@@ -147,24 +172,24 @@ static bool txn_validate_r_set(struct set_t *rs, int rv) {
 }
 
 static void txn_w_commit(struct set_t *ws) {
-    // Iterate through write set
+    // Iterate through write set and write values
     for (size_t i = 0; i < ws->count; i++) {
         write_entry_t *we = ws->entries[i];
         memcpy(we->base.target, we->data, we->size);
     }
 }
 
-static void txn_unlock(struct set_t *ws, write_entry_t *last, int wv, bool committed) {
+static void txn_unlock(struct region_t *region, struct set_t *ws, write_entry_t *last, int wv, bool committed) {    
     for (size_t i = 0; i < ws->count; i++) {
         // Extract corresponding memory location
         write_entry_t *entry = ws->entries[i];
         if (entry == last) return;      // only unlock locked memory regions
         
-        struct segment_node_t *node = ((uintptr_t) entry->base.target + sizeof(struct segment_node_t));
+        v_lock_t *lock = region_get_memory_lock(region, entry->base.target);
         // If transaction has committed, update lock versions
         if (committed) {
-            v_lock_update(&(node->lock), wv);
+            v_lock_update(lock, wv);
         }
-        v_lock_release(&(node->lock));
+        v_lock_release(lock);
     }
 }

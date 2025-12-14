@@ -81,7 +81,7 @@ size_t tm_align(shared_t shared) {
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) {
     struct region_t *region = (struct region *) shared;
-    struct txn_t *txn = txn_create(is_ro, shared);
+    struct txn_t *txn = txn_create(is_ro, global_clock_load(&region->version_clock));
 
     // If transaction creation failed, return invalid_tx
     if (!txn) return invalid_tx;
@@ -114,8 +114,8 @@ bool tm_end(shared_t shared, tx_t tx) {
  * @param target Target start address (in a private region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_read(shared_t unused(shared), tx_t tx, void const* source, size_t size, void* target) {
-    return txn_read((struct txn_t *) tx, source, size, target);
+bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
+    return txn_read((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
 }
 
 /** [thread-safe] Write operation in the given transaction, source in a private region and target in the shared region.

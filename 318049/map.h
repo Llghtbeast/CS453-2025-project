@@ -120,6 +120,10 @@ bool r_set_add(struct set_t* set, void* target);
 bool set_contains(struct set_t *set, void *target);
 
 /**
+ * Get pointer to entry with key target, else NULL
+ */
+struct base_entry_t *set_get(struct set_t *set, void *target);
+/**
  * Read an element from the set.
  * @param set the set to get from
  * @param key pointer to target read location

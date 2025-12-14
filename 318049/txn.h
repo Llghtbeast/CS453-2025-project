@@ -14,7 +14,7 @@
 
 #define ABORT false
 #define COMMIT true
-#define ABORTED_TXN -1
+#define INVALID -1
 
 struct txn_t {
     bool is_ro;
@@ -73,7 +73,7 @@ bool txn_is_ro(struct txn_t *txn);
  * @return true on success; false on failure (e.g., invalid args, out-of-bounds,
  *         or transaction abort decision).
  */
-bool txn_read(struct txn_t *txn, void const *source, size_t size, void *target);
+bool txn_read(struct txn_t *txn, struct region_t *region, void const *source, size_t size, void *target);
 
 /**
  * Write `size` bytes from `source` into `target` (address in `region`) under
@@ -90,7 +90,7 @@ bool txn_read(struct txn_t *txn, void const *source, size_t size, void *target);
  * @return true on success; false on failure (e.g., out-of-bounds, conflicts,
  *         or when the transaction should be aborted).
  */
-bool txn_write(struct txn_t *txn, void const *source, size_t size, void *target);
+bool txn_write(struct txn_t *txn, struct region_t *region, void const *source, size_t size, void *target);
 
 /** End the transaction and cleanup.
  * @param tx     Transaction to end

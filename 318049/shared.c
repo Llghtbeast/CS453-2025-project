@@ -100,3 +100,7 @@ bool region_free(struct region_t *region, struct segment_node_t *node) {
     free(node);
     return true;
 }
+
+v_lock_t *region_get_memory_lock(struct region_t *region, void *addr) {
+    return &region->v_locks[(uintptr_t) addr % VLOCK_NUM];
+}

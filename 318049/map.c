@@ -129,6 +129,15 @@ bool set_contains(struct set_t *set, void *target) {
     return false;
 }
 
+struct base_entry_t *set_get(struct set_t *set, void *target) {
+    if (unlikely(!set)) return NULL;
+    // Check if pointer already in set
+    for (size_t i = 0; i < set->count; i++) {
+        if (set->entries[i]->target == target) return set->entries[i];
+    }
+    return NULL;
+}
+
 bool set_read(struct set_t *set, void const *key, size_t size, void *dest) {
     if (unlikely(!set)) return false;
     if (unlikely(!set->is_write_set)) return false;     // method can only be used on write sets
@@ -136,8 +145,8 @@ bool set_read(struct set_t *set, void const *key, size_t size, void *dest) {
     for (size_t i = 0; i < set->count; i++)
     {
         write_entry_t *entry = (write_entry_t *)set->entries[i];
-        if (entry->base.target == key && entry->size == size) {
-            memcpy(dest, entry->data, entry->size);
+        if (entry->base.target == key) {
+            memcpy(dest, entry->data, size);
             return true;
         }
     }
