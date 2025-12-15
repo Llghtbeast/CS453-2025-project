@@ -25,6 +25,7 @@
 // Internal headers
 #include <tm.h>
 
+#include "helper.h"
 #include "macros.h"
 #include "v_lock.h"
 #include "txn.h"
@@ -36,10 +37,16 @@
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
 shared_t tm_create(size_t size, size_t align) {
+    LOG_LOG("tm_create: creating new transactional machine.\n");
+    
     struct region_t *region = region_create(size, align);
     // If shared memory region allocation failed, return invalid_shared
-    if (!region) return invalid_shared;
-
+    if (!region) {
+        LOG_WARNING("tm_create: transactional machine shared memory region creation failed.\n");
+        return invalid_shared;
+    } 
+    LOG_LOG("tm_create: transactional machine shared memory region %p of size %lu and alignement %lu was successfully created.\n", (shared_t) region, size, align);
+    
     return (shared_t) region;
 }
 
@@ -80,11 +87,17 @@ size_t tm_align(shared_t shared) {
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) {
+    LOG_LOG("tm_begin: creating new transaction.\n");
+    
     struct region_t *region = (struct region_t *) shared;
     struct txn_t *txn = txn_create(is_ro, global_clock_load(&region->version_clock));
 
     // If transaction creation failed, return invalid_tx
-    if (!txn) return invalid_tx;
+    if (!txn) {
+        LOG_WARNING("tm_begin: transaction creation failed.\n");
+        return invalid_tx;
+    }
+    LOG_LOG("tm_begin: transaction %lu was successfully created.\n", (tx_t) txn);
 
     return (tx_t) txn;
 }
@@ -98,8 +111,16 @@ bool tm_end(shared_t shared, tx_t tx) {
     struct txn_t *txn = (struct txn_t *) tx;
     struct region_t *region = (struct region_t *) shared;
 
+    LOG_LOG("tm_end: transaction %lu is ending.\n", tx);
+
     // Try committing transaction
     bool result = txn_end(txn, region);
+
+    if (result == SUCCESS) {
+        LOG_LOG("tm_end: transaction %lu successfully commited.\n", tx);
+    } else {
+        LOG_WARNING("tm_end: transaction %lu failed to commit.\n", tx);
+    }
 
     // Free transaction and return
     txn_free(txn);
@@ -115,7 +136,16 @@ bool tm_end(shared_t shared, tx_t tx) {
  * @return Whether the whole transaction can continue
 **/
 bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
-    return txn_read((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
+    LOG_LOG("tm_read: transaction %lu is reading %lu bytes from %p to %p\n", tx, size, source, target);
+
+    bool read_result = txn_read((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
+
+    if (read_result == SUCCESS) {
+        LOG_LOG("tm_read: transaction %lu read was a success!\n", tx);
+    } else {
+        LOG_WARNING("tm_read: transaction %lu read failed and transaction must abort!\n", tx);
+    }
+    return read_result;
 }
 
 /** [thread-safe] Write operation in the given transaction, source in a private region and target in the shared region.
@@ -127,7 +157,16 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
  * @return Whether the whole transaction can continue
 **/
 bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
-    return txn_write((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
+    LOG_LOG("tm_write: transaction %lu is writing %lu bytes from %p to %p\n", tx, size, source, target);
+    
+    bool write_result = txn_write((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
+
+    if (write_result == SUCCESS) {
+        LOG_LOG("tm_write: transaction %lu write was a success!\n", tx);
+    } else {
+        LOG_WARNING("tm_write: transaction %lu write failed and transaction must abort!\n", tx);
+    }
+    return write_result;
 }
 
 /** [thread-safe] Memory allocation in the given transaction.
@@ -138,8 +177,14 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
  * @return Whether the whole transaction can continue (success/nomem), or not (abort_alloc)
 **/
 alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
+    LOG_LOG("tm_alloc: transaction %lu is allocating %lu bytes\n", tx, size);
+
     struct segment_node_t *node = region_alloc((struct region_t *) shared, size);
-    if (!node) return nomem_alloc;
+    if (!node) {
+        LOG_WARNING("tm_alloc: transaction %lu allocation failed\n", tx);
+        return nomem_alloc;
+    } 
+    LOG_WARNING("tm_alloc: transaction %lu allocation was successful!\n", tx);
 
     // create pointer to start of memory region
     void *data = (void *) ((uintptr_t) node + sizeof(struct segment_node_t));
@@ -156,9 +201,10 @@ alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
  * @param target Address of the first byte of the previously allocated segment to deallocate
  * @return Whether the whole transaction can continue
 **/
-bool tm_free(shared_t shared, tx_t unused(tx), void* target) {
-    struct region_t *region = (struct region_t *) shared;
-    struct segment_node_t* node = (struct segment_node_t*) ((uintptr_t) target - sizeof(struct segment_node_t));
+bool tm_free(shared_t unused(shared), tx_t unused(tx), void* unused(target)) {
+    // struct region_t *region = (struct region_t *) shared;
+    // struct segment_node_t* node = (struct segment_node_t*) ((uintptr_t) target - sizeof(struct segment_node_t));
     
-    return region_free(region, node);
+    // return region_free(region, node);
+    return true;
 }

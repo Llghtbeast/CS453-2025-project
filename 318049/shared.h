@@ -8,11 +8,10 @@
 #include <string.h>
 #include <pthread.h>
 
+#include "helper.h"
 #include "v_lock.h"
 #include "tm.h"
 #include "macros.h"
-
-#define VLOCK_NUM 2<<20
 
 /**
  * @brief Segment of shared memory.

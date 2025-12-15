@@ -7,14 +7,11 @@
 #include <string.h>
 #include <stdatomic.h>
 
+#include "helper.h"
 #include "tm.h"
 #include "map.h"
 #include "macros.h"
 #include "shared.h"
-
-#define ABORT false
-#define COMMIT true
-#define INVALID -1
 
 struct txn_t {
     bool is_ro;

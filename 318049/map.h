@@ -5,12 +5,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "helper.h"
 #include "macros.h"
-
-#define INITIAL_CAPACITY 8
-#define GROW_FACTOR 2
-
-
 
 /**
  * @brief Base entry for read/write sets.

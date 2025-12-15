@@ -85,12 +85,18 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
 
     // Increase capacity if needed
     if (set->count >= set->capacity) {
-        if (!set_grow(set)) return false;
+        if (!set_grow(set)) {
+            LOG_WARNING("w_set_add: failed to grow size of set %p\n", set);
+            return false;
+        }
     }
 
     // Create a new write entry
     write_entry_t *entry = w_entry_create(source, size, target);
-    if (!entry) return false;  
+    if (!entry) {
+        LOG_WARNING("w_set_add: failed to initialize write_entry_t in set %p\n", set);
+        return false;
+    }
     set->entries[set->count++] = &entry->base;
 
     return true;
