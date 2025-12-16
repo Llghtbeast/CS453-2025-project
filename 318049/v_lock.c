@@ -1,43 +1,37 @@
 #include "v_lock.h"
 
 void v_lock_init(v_lock_t *lock) {
-    atomic_init(&lock->version_clock, 0);
-    atomic_init(&lock->owner, invalid_tx);  
+    atomic_init(lock, 0);
 }
 
 void v_lock_cleanup(v_lock_t * unused(lock)) { return; }
 
-bool v_lock_acquire(v_lock_t *lock, tx_t locker) {
-    int old = atomic_load(&lock->version_clock);
+bool v_lock_acquire(v_lock_t *lock) {
+    int old = atomic_load(lock);
     
     // Check if lock is free
     if (old & 0x1) return false;
 
-    if (atomic_compare_exchange_strong(&lock->version_clock, &old, old | 0x1)) {
-        atomic_store(&lock->owner, locker);
+    if (atomic_compare_exchange_strong(lock, &old, old | 0x1)) {
         return true;
     }
     return false;
 }
 
 void v_lock_release(v_lock_t *lock) {
-    atomic_fetch_and(&lock->version_clock, ~1); // clears the lock bit
+    atomic_fetch_and(lock, ~1); // clears the lock bit
 }
 
 void v_lock_release_and_update(v_lock_t* lock, int val) {
-    atomic_store(&lock->version_clock, val << 1);
+    atomic_store(lock, val << 1);
 }
 
 int v_lock_version(v_lock_t *lock) {
-    int version = atomic_load(&lock->version_clock);
+    int version = atomic_load(lock);
     // locked, return -1 (ERROR)
     if (version & 0x1) return LOCKED;
     // unlocked, return version
     return version >> 1;
-}
-
-tx_t v_lock_owner(v_lock_t *lock) {
-    return atomic_load(&lock->owner);
 }
 
 // =========== Global clock functions =========== 

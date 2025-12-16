@@ -55,4 +55,8 @@ struct segment_node_t *region_alloc(struct region_t *, size_t size);
 
 bool region_free(struct region_t *, struct segment_node_t *node);
 
-v_lock_t *region_get_memory_lock(struct region_t *, void const *addr);
+uintptr_t get_memory_lock_index(void const *addr);
+
+v_lock_t *region_get_memory_lock_from_index(struct region_t *region, uintptr_t index);
+
+v_lock_t *region_get_memory_lock_from_ptr(struct region_t *region, void const *addr);

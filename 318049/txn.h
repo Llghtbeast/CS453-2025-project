@@ -21,6 +21,10 @@ struct txn_t {
     // Read and write sets. Contain target address (struct segment_node_t *), data and size of data to be written
     struct set_t *r_set;
     struct set_t *w_set;
+
+    // add bloom set
+
+    // add container with pointers to to-free memory regions
 };
 
 /**

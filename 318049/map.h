@@ -6,8 +6,21 @@
 #include <string.h>
 
 #include "helper.h"
+#include "helper.h"
 #include "macros.h"
 
+// #define BLOOM_SIZE 512
+// #define BLOOM_N_HASH 7
+
+// ============== bloom filter methods ============== 
+// typedef struct bloom_filter_s {
+//     uint64_t bit_array[BLOOM_SIZE/64];
+// } bloom_filter_t;
+
+// void bloom_init(bloom_filter_t *filter);
+
+
+// ============== set implementation ============== 
 /**
  * @brief Base entry for read/write sets.
  * Read entries only use the target field.

@@ -101,6 +101,14 @@ bool region_free(struct region_t *region, struct segment_node_t *node) {
     return true;
 }
 
-v_lock_t *region_get_memory_lock(struct region_t *region, void const *addr) {
-    return &region->v_locks[(uintptr_t) addr % VLOCK_NUM];
+uintptr_t get_memory_lock_index(void const *addr) {
+    return (uintptr_t) addr % VLOCK_NUM;
+}
+
+v_lock_t *region_get_memory_lock_from_index(struct region_t *region, uintptr_t index) {
+    return &region->v_locks[index];
+}
+
+v_lock_t *region_get_memory_lock_from_ptr(struct region_t *region, void const *addr) {
+    return &region->v_locks[get_memory_lock_index(addr)];
 }

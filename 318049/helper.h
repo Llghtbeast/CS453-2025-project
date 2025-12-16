@@ -2,16 +2,19 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <time.h>
+#include <stdatomic.h>
 
 #include "macros.h"
 
+typedef atomic_int version_clock_t; // The type of the version clock
 
 // map.h
 #define INITIAL_CAPACITY 8
 #define GROW_FACTOR 2
 
 // shared.h
-#define VLOCK_NUM 1048576
+#define VLOCK_NUM 65536
 
 // txn.h
 #define ABORT false
@@ -30,12 +33,13 @@
 
 // Severity
 #define LOG_LEVEL_RELEASE 0
-#define LOG_LEVEL_WARNING 1
-#define LOG_LEVEL_NOTE    2
-#define LOG_LEVEL_LOG     3
-#define LOG_LEVEL_DEBUG   4
+#define LOG_LEVEL_TEST    1
+#define LOG_LEVEL_WARNING 2
+#define LOG_LEVEL_NOTE    3
+#define LOG_LEVEL_LOG     4
+#define LOG_LEVEL_DEBUG   5
 
-#define LOG_LEVEL LOG_LEVEL_RELEASE
+#define LOG_LEVEL LOG_LEVEL_TEST
 
 static inline void debug_vprint(
     int severity,
@@ -56,6 +60,8 @@ static inline void debug_vprint(
         va_end(args);
     }
 }
+
+#define LOG_TEST(fmt, ...) debug_vprint(LOG_LEVEL_TEST, stdout, COLOR_WHITE, "[TEST] ", __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 #define LOG_WARNING(fmt, ...) debug_vprint(LOG_LEVEL_WARNING, stdout, COLOR_RED, "[WARNING] ", __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 

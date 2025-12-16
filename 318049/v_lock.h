@@ -11,11 +11,7 @@
 /**
  * @brief A versioned spinlock.
  */
-// typedef atomic_llong v_lock_t;
-typedef struct v_lock_s {
-    version_clock_t version_clock;
-    atomic_uintptr_t owner;
-} v_lock_t;
+typedef version_clock_t v_lock_t;
 
 /** 
  * Initialize the given lock.
@@ -33,10 +29,9 @@ void v_lock_cleanup(v_lock_t* lock);
 /**
  * Try acquiring lock
  * @param lock Lock to acquire
- * @param locker transaction trying to acquire this lock
  * @return true if lock was acquired, false otherwise
  */
-bool v_lock_acquire(v_lock_t* lock, tx_t locker);
+bool v_lock_acquire(v_lock_t* lock);
 
 /**
  * Release lock
@@ -53,11 +48,6 @@ void v_lock_release_and_update(v_lock_t* lock, int val);
  * Get version of the lock
  */
 int v_lock_version(v_lock_t* lock);
-
-/**
- * Get owner of the lock
- */
-tx_t v_lock_owner(v_lock_t* lock);
 
 // ============= Global clock implementation ============= 
 /**

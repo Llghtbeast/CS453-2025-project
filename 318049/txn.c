@@ -82,8 +82,7 @@ bool txn_read(struct txn_t *txn, struct region_t *region, void const *source, si
         // Verify lock is free (without acquiring it)
         int lv_pre = v_lock_version(lock);
         if ((lv_pre == LOCKED) || (lv_pre > txn->rv)) {
-            tx_t owner = v_lock_owner(lock);
-            LOG_WARNING("txn_read: transaction %lu failed lock PRE-validation for source: %p -> lock %p with owner %lu!\n", (tx_t) txn, source_addr, lock, owner);
+            LOG_WARNING("txn_read: transaction %lu failed lock PRE-validation for source: %p -> lock %p!\n", (tx_t) txn, source_addr, lock);
             // txn_free(txn);
             return ABORT; 
         }
@@ -93,8 +92,7 @@ bool txn_read(struct txn_t *txn, struct region_t *region, void const *source, si
         // Lock post-validation
         int lv_post = v_lock_version(lock);
         if ((lv_post == LOCKED) || (lv_post != lv_pre)) {
-            tx_t owner = v_lock_owner(lock);
-            LOG_WARNING("txn_read: transaction %lu failed lock POST-validation for source: %p -> lock %p with owner %lu!\n", (tx_t) txn, source_addr, lock, owner);
+            LOG_WARNING("txn_read: transaction %lu failed lock POST-validation for source: %p -> lock %p\n", (tx_t) txn, source_addr, lock);
             // txn_free(txn);
             return ABORT; 
         }
@@ -163,16 +161,25 @@ bool txn_end(struct txn_t *txn, struct region_t *region) {
 
 // ============================================= static functions implementation =============================================
 static bool txn_lock(struct txn_t *txn, struct region_t *region) {
-    LOG_LOG("txn_lock: transaction %lu must acquire %lu locks\n", (tx_t) txn, txn->w_set->count);
+    if (unlikely(txn->w_set->count >= VLOCK_NUM))
+        LOG_TEST("txn_lock: transaction %lu must acquire %lu locks\n", (tx_t) txn, txn->w_set->count);
+    
+    // Initialize locks to acquire arry
+    uint8_t locks_to_acquire[VLOCK_NUM/8];
+
+    for (size_t i = 0; i < txn->w_set->count; i++) {
+        write_entry_t *entry = (write_entry_t *)txn->w_set->entries[i];
+        locks_to_acquire = locks_to_acquire | (1 << get_memory_lock_index(entry));
+        // TODO:
+    }
+
     for (size_t i = 0; i < txn->w_set->count; i++) {
         // Extract corresponding memory location
         write_entry_t *entry = (write_entry_t *)txn->w_set->entries[i];
 
         v_lock_t *lock = region_get_memory_lock(region, entry->base.target);
-        if (!v_lock_acquire(lock, (tx_t) txn)) {
-            tx_t owner = v_lock_owner(lock);
+        if (!v_lock_acquire(lock)) {
             // Failed to acquire lock -> unlock acquired locks & abort transaction
-            LOG_WARNING("txn_lock: transaction %lu failed to acquire lock %p with owner %lu for entry %d {target: %p} of write set.\n", (tx_t) txn, lock, owner, i, entry->base.target);
             txn_unlock(txn, region, entry, false);
             return ABORT;
         }

@@ -16,23 +16,12 @@ SRCS_C   := $(call WILD_EXT,EXT_C,$(SOURCE_DIR))
 SRCS_CXX := $(call WILD_EXT,EXT_CXX,$(SOURCE_DIR))
 OBJS     := $(SRCS_C:%=%.o) $(SRCS_CXX:%=%.o)
 
-# Conditional Debugging: Check for the DEBUG_FLAG passed from the top-level Makefile
-ifeq ($(DEBUG_FLAG),1)
-    # Debug build: Disable optimization and add debug symbols
-    DB_OPTS := -O0
-    DBG_SYM := -g
-else
-    # Default: Optimized release build (Original behavior)
-    DB_OPTS := -O2
-    DBG_SYM := 
-endif
-
 CC       := $(CC)
-CCFLAGS  := -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) -std=c11 -fPIC -I$(INCLUDE_DIR)
+CCFLAGS  := -Wall -Wextra -Wfatal-errors -O2 -std=c11 -fPIC -I$(INCLUDE_DIR)
 CXX      := $(CXX)
-CXXFLAGS := -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) -std=c++17 -fPIC -I$(INCLUDE_DIR)
+CXXFLAGS := -Wall -Wextra -Wfatal-errors -O2 -std=c++17 -fPIC -I$(INCLUDE_DIR)
 LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
-LDFLAGS  := -shared $(DBG_SYM)
+LDFLAGS  := -shared
 LDLIBS   :=
 
 .PHONY: build clean
