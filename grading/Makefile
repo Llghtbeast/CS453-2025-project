@@ -16,13 +16,30 @@ SRCS_C   := $(foreach SOURCE_DIR,$(SOURCE_DIRS),$(call WILD_EXT,EXT_C,$(SOURCE_D
 SRCS_CXX := $(foreach SOURCE_DIR,$(SOURCE_DIRS),$(call WILD_EXT,EXT_CXX,$(SOURCE_DIR)))
 OBJS     := $(SRCS_C:%=%.o) $(SRCS_CXX:%=%.o)
 
+ifeq ($(DEBUG_FLAG),)
+    # Default: Optimized release build
+    DB_OPTS := -O2
+    DBG_SYM := 
+else
+    # Debug build: Disable optimization, add debug symbols, and enable ASan
+    DB_OPTS := -O0
+    DBG_SYM := -g
+endif
+
 CC       := $(CC)
-CCFLAGS  := -Wall -Wextra -Wfatal-errors -O2 -std=c11 $(foreach INCLUDE_DIR,$(INCLUDE_DIRS),-I$(INCLUDE_DIR))
+CCFLAGS  := -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) -std=c11 $(foreach INCLUDE_DIR,$(INCLUDE_DIRS),-I$(INCLUDE_DIR))
 CXX      := $(CXX)
-CXXFLAGS := -Wall -Wextra -Wfatal-errors -O2 -std=c++17 $(foreach INCLUDE_DIR,$(INCLUDE_DIRS),-I$(INCLUDE_DIR))
+CXXFLAGS := -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) -std=c++17 $(foreach INCLUDE_DIR,$(INCLUDE_DIRS),-I$(INCLUDE_DIR))
 LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
-LDFLAGS  :=
+LDFLAGS  := $(DBG_SYM)
 LDLIBS   := -ldl -lpthread
+# CC       := $(CC)
+# CCFLAGS  := -Wall -Wextra -Wfatal-errors -O2 -std=c11 $(foreach INCLUDE_DIR,$(INCLUDE_DIRS),-I$(INCLUDE_DIR))
+# CXX      := $(CXX)
+# CXXFLAGS := -Wall -Wextra -Wfatal-errors -O2 -std=c++17 $(foreach INCLUDE_DIR,$(INCLUDE_DIRS),-I$(INCLUDE_DIR))
+# LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
+# LDFLAGS  :=
+# LDLIBS   := -ldl -lpthread
 
 LIB_DIRS := $(filter-out ../include/ ../grading/ ../playground/ ../template/ ../sync-examples/,$(filter-out $(wildcard ../*),$(wildcard ../*/)))
 LIB_SOS  := $(patsubst %/,%.so,$(filter-out ../reference/,$(LIB_DIRS)))
@@ -31,13 +48,21 @@ LIB_SOS  := $(patsubst %/,%.so,$(filter-out ../reference/,$(LIB_DIRS)))
 
 build: $(BIN)
 build-libs:
-	@$(foreach DIR,$(LIB_DIRS),make -C $(DIR) build; )
+	@$(foreach DIR,$(LIB_DIRS), $(MAKE) -C $(DIR) build DEBUG_FLAG=$(DEBUG_FLAG); )
 clean:
 	$(RM) $(OBJS) $(BIN)
 clean-libs:
 	@$(foreach DIR,$(LIB_DIRS),make -C $(DIR) clean; )
 run: $(BIN)
 	$(BIN) 453 ../reference.so $(LIB_SOS)
+test: $(BIN)
+	$(BIN) 453 $(LIB_SOS)
+build-debug: clean clean-libs
+	$(MAKE) build-libs DEBUG_FLAG=1
+	$(MAKE) build DEBUG_FLAG=1
+
+debug: build-debug
+	gdb --args $(BIN) 453 ../reference.so $(LIB_SOS)
 
 define BUILD_C
 %.$(1).o: %.$(1) $$(HDRS_C) Makefile
