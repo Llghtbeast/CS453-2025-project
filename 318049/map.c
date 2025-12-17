@@ -74,14 +74,23 @@ struct set_t *set_init(bool is_write_set) {
 bool w_set_add(struct set_t *set, void const *source, size_t size, void *target) {
     if (unlikely(!set)) return false;
 
+    // struct timespec t1, t2, t3, t4;
+    // if (unlikely(set->count > 1000))
+    //     clock_gettime(CLOCK_MONOTONIC, &t1);
+
     // Check if pointer already in set
-    for (size_t i = 0; i < set->count; i++) {
-        struct base_entry_t *entry = set->entries[i];
-        if (unlikely(entry->target == target)) {
-            write_entry_t *w_entry = (write_entry_t *) entry;
-            return w_entry_update(w_entry, source, size);
+    if (likely(get_bit(set->lock_field, get_memory_lock_index(target)))) {
+        for (size_t i = 0; i < set->count; i++) {
+            struct base_entry_t *entry = set->entries[i];
+            if (unlikely(entry->target == target)) {
+                write_entry_t *w_entry = (write_entry_t *) entry;
+                return w_entry_update(w_entry, source, size);
+            }
         }
     }
+
+    // if (unlikely(set->count > 1000))
+    //     clock_gettime(CLOCK_MONOTONIC, &t2);
 
     // Increase capacity if needed
     if (unlikely(set->count >= set->capacity)) {
@@ -91,6 +100,9 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
         }
     }
 
+    // if (unlikely(set->count > 1000))
+    //     clock_gettime(CLOCK_MONOTONIC, &t3);
+
     // Create a new write entry
     write_entry_t *entry = w_entry_create(source, size, target);
     if (unlikely(!entry)) {
@@ -99,6 +111,17 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
     }
     set->entries[set->count++] = &entry->base;
 
+    // set memory lock field
+    set_bit(set->lock_field, get_memory_lock_index(target));
+
+    // if (unlikely(set->count > 1000)) {
+    //     clock_gettime(CLOCK_MONOTONIC, &t4);
+    
+    //     // Make sure to update the print statement to reflect the correct function name
+    //     printf("w_set_add: set size: %lu, target hash: %ld, Elapsed time: contains check: %ldns, grow: %ldns, insert: %ld \n", 
+    //         set->count, get_memory_lock_index(target), (t2.tv_nsec - t1.tv_nsec), (t3.tv_nsec - t2.tv_nsec), (t4.tv_nsec - t3.tv_nsec));
+    // }
+
     return true;
 }
 
@@ -106,10 +129,12 @@ bool r_set_add(struct set_t* set, void* target) {
     if (unlikely(!set)) return false;
 
     // Check if pointer already in set
-    for (size_t i = 0; i < set->count; i++) {
-        struct base_entry_t *entry = set->entries[i];
-        if (unlikely(entry->target == target)) {
-            return true;
+    if (likely(get_bit(set->lock_field, get_memory_lock_index(target)))) {
+        for (size_t i = 0; i < set->count; i++) {
+            struct base_entry_t *entry = set->entries[i];
+            if (unlikely(entry->target == target)) {
+                return true;
+            }
         }
     }
 
@@ -122,6 +147,9 @@ bool r_set_add(struct set_t* set, void* target) {
     read_entry_t *entry = r_entry_create(target);
     if (unlikely(!entry)) return false;  
     set->entries[set->count++] = entry;
+
+    // set memory lock field
+    set_bit(set->lock_field, get_memory_lock_index(target));
 
     return true;
 }

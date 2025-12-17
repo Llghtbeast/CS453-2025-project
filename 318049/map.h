@@ -1,26 +1,19 @@
 #pragma once
 
+// Requested feature: posix_memalign
+// #define _POSIX_C_SOURCE   200809L
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+// #include <stdio.h>
+// #include <time.h>
 
 #include "helper.h"
 #include "helper.h"
 #include "macros.h"
 
-// #define BLOOM_SIZE 512
-// #define BLOOM_N_HASH 7
-
-// ============== bloom filter methods ============== 
-// typedef struct bloom_filter_s {
-//     uint64_t bit_array[BLOOM_SIZE/64];
-// } bloom_filter_t;
-
-// void bloom_init(bloom_filter_t *filter);
-
-
-// ============== set implementation ============== 
 /**
  * @brief Base entry for read/write sets.
  * Read entries only use the target field.
@@ -49,10 +42,13 @@ typedef struct base_entry_t read_entry_t;
  * TODO: improve once solution works. (sort the elements progressively, use a tree, ...)
  */
 struct set_t {
+    bool is_write_set;
+
     struct base_entry_t** entries;
     size_t count;
     size_t capacity;
-    bool is_write_set;
+
+    uint64_t lock_field[VLOCK_NUM/64];
 };
 
 // ============== entry_t methods ============== 
