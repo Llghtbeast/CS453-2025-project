@@ -13,7 +13,7 @@ static bool txn_validate_r_set(struct region_t *region, struct set_t *rs, int rv
 
 static void txn_w_commit(struct set_t *ws);
 
-static void txn_unlock(struct txn_t *txn, struct region_t *region, write_entry_t *last, bool committed);
+static void txn_unlock(struct txn_t *txn, struct region_t *region, size_t last, bool committed);
 
 // ============================================= global functions =============================================
 
@@ -52,6 +52,7 @@ void txn_free(struct txn_t *txn) {
     
     set_free(txn->r_set);
     set_free(txn->w_set);
+    free(txn->unique_lock_ids);
     free(txn);
 }
 
@@ -77,7 +78,7 @@ bool txn_read(struct txn_t *txn, struct region_t *region, void const *source, si
         }
 
         // Determine lock associated to shared memory region
-        v_lock_t *lock = region_get_memory_lock(region, source_addr);
+        v_lock_t *lock = region_get_memory_lock_from_ptr(region, source_addr);
 
         // Verify lock is free (without acquiring it)
         int lv_pre = v_lock_version(lock);
@@ -146,7 +147,7 @@ bool txn_end(struct txn_t *txn, struct region_t *region) {
         // Validate the read set
         if (!txn_validate_r_set(region, txn->r_set, txn->rv)){
             LOG_WARNING("txn_end: transaction %lu failed to validate read-set!\n", (tx_t) txn);
-            txn_unlock(txn, region, NULL, false);
+            txn_unlock(txn, region, txn->unique_count, false);
             return ABORT;
         } 
     }
@@ -155,36 +156,45 @@ bool txn_end(struct txn_t *txn, struct region_t *region) {
     txn_w_commit(txn->w_set);
     
     // Release locks and update their write version
-    txn_unlock(txn, region, NULL, true);
+    txn_unlock(txn, region, txn->unique_count, true);
     return SUCCESS;
 }
 
 // ============================================= static functions implementation =============================================
 static bool txn_lock(struct txn_t *txn, struct region_t *region) {
-    if (unlikely(txn->w_set->count >= VLOCK_NUM))
-        LOG_TEST("txn_lock: transaction %lu must acquire %lu locks\n", (tx_t) txn, txn->w_set->count);
-    
-    // Initialize locks to acquire arry
-    uint8_t locks_to_acquire[VLOCK_NUM/8];
+    LOG_TEST("txn_lock: transaction %lu must lock %lu locks\n", (tx_t) txn, txn->w_set->count);
+    // Initialize locks to acquire array
+    txn->unique_lock_ids = malloc(txn->w_set->count * sizeof(size_t));
+    if (unlikely(!txn->unique_lock_ids)) return ABORT;
 
     for (size_t i = 0; i < txn->w_set->count; i++) {
         write_entry_t *entry = (write_entry_t *)txn->w_set->entries[i];
-        locks_to_acquire = locks_to_acquire | (1 << get_memory_lock_index(entry));
-        // TODO:
+
+        size_t lock_id = get_memory_lock_index(entry);
+        size_t byte_index = lock_id / 64;
+        size_t byte_offset = lock_id % 64;
+
+        if (!(txn->lock_field[byte_index] & (1ULL << byte_offset))) {
+            txn->lock_field[byte_index ] |= (1ULL << byte_offset);
+            txn->unique_lock_ids[txn->unique_count++] = lock_id;
+        }
     }
 
-    for (size_t i = 0; i < txn->w_set->count; i++) {
-        // Extract corresponding memory location
-        write_entry_t *entry = (write_entry_t *)txn->w_set->entries[i];
-
-        v_lock_t *lock = region_get_memory_lock(region, entry->base.target);
+    // Try acquiring all the locks
+    for (size_t i = 0; i < txn->unique_count; i++) {
+        size_t lock_id = txn->unique_lock_ids[i];
+        // size_t byte_index = lock_id / 64;
+        // size_t byte_offset = lock_id % 64;
+        v_lock_t *lock = region_get_memory_lock_from_index(region, lock_id);
         if (!v_lock_acquire(lock)) {
             // Failed to acquire lock -> unlock acquired locks & abort transaction
-            txn_unlock(txn, region, entry, false);
+            txn_unlock(txn, region, i, false);
+            LOG_WARNING("txn_lock: transaction %lu failed to acquire lock %p with id %lu\n", (tx_t) txn, lock, lock_id);
             return ABORT;
         }
-        LOG_DEBUG("txn_lock: transaction %lu acquired lock %p for entry %d {target: %p} of write set.\n", (tx_t) txn, lock, i, entry->base.target);
+        LOG_DEBUG("txn_lock: transaction %lu acquired lock %p with id %lu\n", (tx_t) txn, lock, lock_id);
     }
+    
     LOG_LOG("txn_lock: transaction %lu has successfully acquired all %lu locks\n", (tx_t) txn, txn->w_set->count);
     return SUCCESS;
 }
@@ -198,7 +208,7 @@ static bool txn_validate_r_set(struct region_t *region, struct set_t *rs, int rv
     // Iterate through read set
     for (size_t i = 0; i < rs->count; i++) {
         read_entry_t *entry = rs->entries[i];
-        v_lock_t *lock = region_get_memory_lock(region, entry->target);
+        v_lock_t *lock = region_get_memory_lock_from_ptr(region, entry->target);
 
         int lv = v_lock_version(lock);
         // If lock is not acquirable or the lock version clock is higher than tx->rv, abort.
@@ -217,26 +227,29 @@ static void txn_w_commit(struct set_t *ws) {
     }
 }
 
-static void txn_unlock(struct txn_t *txn, struct region_t *region, write_entry_t *last, bool committed) {    
+static void txn_unlock(struct txn_t *txn, struct region_t *region, size_t last, bool committed) {    
     if (committed) {
         LOG_DEBUG("txn_unlock: transaction %lu must release and update %lu locks \n", (tx_t) txn, txn->w_set->count);
     } else {
         LOG_DEBUG("txn_unlock: transaction %lu must release %lu locks \n", (tx_t) txn, txn->w_set->count);
     }
     
-    for (size_t i = 0; i < txn->w_set->count; i++) {
-        // Extract corresponding memory location
-        write_entry_t *entry = (write_entry_t *) txn->w_set->entries[i];
-        if (entry == last) return;      // only unlock locked memory regions
+    for (size_t i = 0; i < last; i++) {
+        size_t lock_id = txn->unique_lock_ids[i];
+        // size_t byte_index = lock_id / 64;
+        // size_t byte_offset = lock_id % 64;
         
-        v_lock_t *lock = region_get_memory_lock(region, entry->base.target);
-        
+        // if (txn->lock_field[byte_index] & (1 << byte_offset)) {
+        v_lock_t *lock = region_get_memory_lock_from_index(region, lock_id);
+    
         // If transaction has committed, update lock versions
         if (committed) {
             v_lock_release_and_update(lock, txn->wv);
         } else {
             v_lock_release(lock);
         }
+        // }
     }
+    
     LOG_LOG("txn_unlock: transaction %lu has successfully released %lu locks \n", (tx_t) txn, txn->w_set->count);
 }

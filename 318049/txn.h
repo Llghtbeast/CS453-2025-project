@@ -22,6 +22,11 @@ struct txn_t {
     struct set_t *r_set;
     struct set_t *w_set;
 
+    // Locks to acquire for commit
+    uint64_t lock_field[VLOCK_NUM/64];
+    size_t *unique_lock_ids; 
+    size_t unique_count;
+
     // add bloom set
 
     // add container with pointers to to-free memory regions

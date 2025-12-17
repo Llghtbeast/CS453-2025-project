@@ -16,13 +16,36 @@ SRCS_C   := $(call WILD_EXT,EXT_C,$(SOURCE_DIR))
 SRCS_CXX := $(call WILD_EXT,EXT_CXX,$(SOURCE_DIR))
 OBJS     := $(SRCS_C:%=%.o) $(SRCS_CXX:%=%.o)
 
+ifeq ($(DEBUG_FLAG),)
+    # Default: Optimized release build
+    DB_OPTS := -O2
+    DBG_SYM := 
+    ASAN_FLAG := 
+else
+    # Debug build: Disable optimization, add debug symbols, and enable ASan
+    DB_OPTS := -O0
+    DBG_SYM := -g
+    ASAN_FLAG := 
+endif
+
 CC       := $(CC)
-CCFLAGS  := -Wall -Wextra -Wfatal-errors -O2 -std=c11 -fPIC -I$(INCLUDE_DIR)
+# Add $(ASAN_FLAG) to compilation flags
+CCFLAGS  := -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) $(ASAN_FLAG) -std=c11 $(foreach INCLUDE_DIR,$(INCLUDE_DIR),-I$(INCLUDE_DIR))
 CXX      := $(CXX)
-CXXFLAGS := -Wall -Wextra -Wfatal-errors -O2 -std=c++17 -fPIC -I$(INCLUDE_DIR)
+# Add $(ASAN_FLAG) to compilation flags
+CXXFLAGS := -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) $(ASAN_FLAG) -std=c++17 $(foreach INCLUDE_DIR,$(INCLUDE_DIR),-I$(INCLUDE_DIR))
 LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
-LDFLAGS  := -shared
-LDLIBS   :=
+# Add $(ASAN_FLAG) to linker flags (CRITICAL)
+LDFLAGS  := $(ASAN_FLAG) 
+LDLIBS   := -ldl -lpthread
+
+# CC       := $(CC)
+# CCFLAGS  := -Wall -Wextra -Wfatal-errors -O2 -std=c11 -fPIC -I$(INCLUDE_DIR)
+# CXX      := $(CXX)
+# CXXFLAGS := -Wall -Wextra -Wfatal-errors -O2 -std=c++17 -fPIC -I$(INCLUDE_DIR)
+# LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
+# LDFLAGS  := -shared
+# LDLIBS   :=
 
 .PHONY: build clean
 
