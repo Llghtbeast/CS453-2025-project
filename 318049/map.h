@@ -162,12 +162,3 @@ size_t set_size(struct set_t *set);
  * @return Whether the operation was a success
  */
 bool set_grow(struct set_t *set);
-
-// ============== pseudo-hash map implementation ============== 
-/**
- * @brief This is a hash map that maps each lock strip to its corresponding memory regions
- * in the shared memory region
- */
-// struct lock_set_t {
-
-// };

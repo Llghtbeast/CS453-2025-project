@@ -37,7 +37,7 @@
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
 shared_t tm_create(size_t size, size_t align) {
-    // LOG_LOG("tm_create: creating new transactional machine.\n");
+    LOG_LOG("tm_create: creating new transactional machine.\n");
     
     struct region_t *region = region_create(size, align);
     // If shared memory region allocation failed, return invalid_shared
@@ -45,7 +45,7 @@ shared_t tm_create(size_t size, size_t align) {
         LOG_WARNING("tm_create: transactional machine shared memory region creation failed.\n");
         return invalid_shared;
     } 
-    // LOG_LOG("tm_create: transactional machine shared memory region %p of size %lu and alignement %lu was successfully created.\n", (shared_t) region, size, align);
+    LOG_LOG("tm_create: transactional machine shared memory region %p of size %lu and alignement %lu was successfully created.\n", (shared_t) region, size, align);
     
     return (shared_t) region;
 }
@@ -117,7 +117,7 @@ bool tm_end(shared_t shared, tx_t tx) {
     bool result = txn_end(txn, region);
 
     if (result == SUCCESS) {
-        LOG_TEST("tm_end: transaction %lu successfully commited.\n", tx);
+        LOG_LOG("tm_end: transaction %lu successfully commited.\n", tx);
     } else {
         LOG_WARNING("tm_end: transaction %lu failed to commit.\n", tx);
     }
@@ -136,12 +136,12 @@ bool tm_end(shared_t shared, tx_t tx) {
  * @return Whether the whole transaction can continue
 **/
 bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
-    // LOG_LOG("tm_read: transaction %lu is reading %lu bytes from %p to %p\n", tx, size, source, target);
+    LOG_LOG("tm_read: transaction %lu is reading %lu bytes from %p to %p\n", tx, size, source, target);
 
     bool read_result = txn_read((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
 
     if (read_result == SUCCESS) {
-        // LOG_LOG("tm_read: transaction %lu read was a success!\n", tx);
+        LOG_LOG("tm_read: transaction %lu read was a success!\n", tx);
     } else {
         LOG_WARNING("tm_read: transaction %lu read failed and transaction must abort!\n", tx);
     }
@@ -157,12 +157,12 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
  * @return Whether the whole transaction can continue
 **/
 bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
-    // LOG_LOG("tm_write: transaction %lu is writing %lu bytes from %p to %p\n", tx, size, source, target);
+    LOG_LOG("tm_write: transaction %lu is writing %lu bytes from %p to %p\n", tx, size, source, target);
     
     bool write_result = txn_write((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
 
     if (write_result == SUCCESS) {
-        // LOG_LOG("tm_write: transaction %lu write was a success!\n", tx);
+        LOG_LOG("tm_write: transaction %lu write was a success!\n", tx);
     } else {
         LOG_WARNING("tm_write: transaction %lu write failed and transaction must abort!\n", tx);
     }

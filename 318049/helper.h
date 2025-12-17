@@ -39,7 +39,7 @@ typedef atomic_int version_clock_t; // The type of the version clock
 #define LOG_LEVEL_LOG     4
 #define LOG_LEVEL_DEBUG   5
 
-#define LOG_LEVEL LOG_LEVEL_RELEASE
+#define LOG_LEVEL LOG_LEVEL_TEST
 
 static inline void debug_vprint(
     int severity,
