@@ -117,7 +117,7 @@ bool tm_end(shared_t shared, tx_t tx) {
     bool result = txn_end(txn, region);
 
     if (result == SUCCESS) {
-        LOG_LOG("tm_end: transaction %lu successfully commited.\n", tx);
+        LOG_TEST("tm_end: transaction %lu successfully commited.\n", tx);
     } else {
         LOG_WARNING("tm_end: transaction %lu failed to commit.\n", tx);
     }

@@ -6,19 +6,20 @@
 #include <string.h>
 
 #include "helper.h"
-#include "helper.h"
 #include "macros.h"
+#include "shared.h"
 
-// #define BLOOM_SIZE 512
-// #define BLOOM_N_HASH 7
+// ============== hash_map_t implementation ============== 
+struct entry_index_t {
+    void const *target;
+    size_t index;
 
-// ============== bloom filter methods ============== 
-// typedef struct bloom_filter_s {
-//     uint64_t bit_array[BLOOM_SIZE/64];
-// } bloom_filter_t;
+    struct entry_index_t *next;
+};
 
-// void bloom_init(bloom_filter_t *filter);
-
+struct hash_map_t {
+    struct entry_index_t *map[VLOCK_NUM];
+};
 
 // ============== set implementation ============== 
 /**
@@ -49,11 +50,27 @@ typedef struct base_entry_t read_entry_t;
  * TODO: improve once solution works. (sort the elements progressively, use a tree, ...)
  */
 struct set_t {
+    bool is_write_set;
+
     struct base_entry_t** entries;
     size_t count;
     size_t capacity;
-    bool is_write_set;
+
+    // redundant fast access to entries
+    bool collision;
+    struct hash_map_t *entries_index;
 };
+
+// ============== hash_map_t methods ============== 
+struct entry_index_t *entry_index_create (void const *target, uintptr_t id);
+
+struct hash_map_t *hash_map_create();
+
+void hash_map_free(struct hash_map_t *hash_map);
+
+struct entry_index_t *hash_map_get(struct hash_map_t *hash_map, void const *target);
+
+void hash_map_add(struct hash_map_t *hash_map, void const *target, size_t id);
 
 // ============== entry_t methods ============== 
 /**
