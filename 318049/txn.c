@@ -161,6 +161,9 @@ bool txn_end(struct txn_t *txn, struct region_t *region) {
 
 // ============================================= static functions implementation =============================================
 static bool txn_lock(struct txn_t *txn, struct region_t *region) {
+    if (unlikely(txn->w_set->count >= VLOCK_NUM))
+        LOG_TEST("txn_lock: transaction %lu must acquire %lu locks\n", (tx_t) txn, txn->w_set->count);
+    
     // Initialize locks to acquire arry
     // uint8_t locks_to_acquire[VLOCK_NUM/8];
 
@@ -176,7 +179,6 @@ static bool txn_lock(struct txn_t *txn, struct region_t *region) {
 
         v_lock_t *lock = region_get_memory_lock_from_ptr(region, entry->base.target);
         if (!v_lock_acquire(lock)) {
-            LOG_WARNING("txn_lock: transaction %lu failed to acquired lock %p for entry %d {target: %p} of write set.\n", (tx_t) txn, lock, i, entry->base.target);
             // Failed to acquire lock -> unlock acquired locks & abort transaction
             txn_unlock(txn, region, entry, false);
             return ABORT;
@@ -230,7 +232,7 @@ static void txn_unlock(struct txn_t *txn, struct region_t *region, write_entry_t
         v_lock_t *lock = region_get_memory_lock_from_ptr(region, entry->base.target);
         
         // If transaction has committed, update lock versions
-        if (committed) {
+        if (unlikely(committed)) {
             v_lock_release_and_update(lock, txn->wv);
         } else {
             v_lock_release(lock);
