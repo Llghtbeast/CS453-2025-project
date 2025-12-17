@@ -1,5 +1,21 @@
 #include "map.h"
 
+// ============== helper methods ==============
+/**
+ * Find the index of the entry containing this target. 
+ * If not contained in the set, return set->capacity
+ */
+static size_t set_find(struct set_t *set, void const *target);
+
+/**
+ * Find the next ideal available bucket for the target
+ */ 
+static size_t set_find_next_free(struct set_t *set, void const *target);
+
+static void w_set_add_help(struct set_t *set, write_entry_t *entry);
+
+static void r_set_add_help(struct set_t *set, read_entry_t *entry);
+
 // ============== entry_t methods ============== 
 read_entry_t *r_entry_create(void *target) {
     // Allocate memory for struct
@@ -23,7 +39,6 @@ write_entry_t *w_entry_create(void const *source, size_t size, void *target) {
     }
 
     entry->base.target = target;
-    entry->size = size;
     memcpy(entry->data, source, size);
 
     return entry;
@@ -31,7 +46,6 @@ write_entry_t *w_entry_create(void const *source, size_t size, void *target) {
 
 bool w_entry_update(write_entry_t *entry, void const *source, size_t size) {
     if (unlikely(!entry)) return false;
-    if (unlikely(size != entry->size)) return false;
 
     // Update write entry
     memcpy(entry->data, source, size);
@@ -50,7 +64,7 @@ void w_entry_free(write_entry_t *entry) {
 }
 
 // ============== set_t methods ============== 
-struct set_t *set_init(bool is_write_set) {
+struct set_t *set_init(bool is_write_set, size_t data_size) {
     // Allocate memory for the set_t structure
     struct set_t *set = (struct set_t *)malloc(sizeof(struct set_t));
     if (unlikely(!set)) {
@@ -63,45 +77,44 @@ struct set_t *set_init(bool is_write_set) {
         return NULL;
     }
 
+    set->occupied_field = calloc(INITIAL_CAPACITY/64, sizeof(uint64_t));
+    if (unlikely(!set->occupied_field)) {
+        free(set->entries);
+        free(set);
+        return NULL;
+    }
+
     // Initialize attributes
+    set->is_write_set = is_write_set;
+    set->data_size = data_size;
     set->count = 0;
     set->capacity = INITIAL_CAPACITY;
-    set->is_write_set = is_write_set;
+    memset(set->lock_field, 0, sizeof(set->lock_field));
   
     return set;
 }
 
 bool w_set_add(struct set_t *set, void const *source, size_t size, void *target) {
     if (unlikely(!set)) return false;
-
-    // struct timespec t1, t2, t3, t4;
-    // if (unlikely(set->count > 1000))
-    //     clock_gettime(CLOCK_MONOTONIC, &t1);
-
-    // Check if pointer already in set
-    if (likely(get_bit(set->lock_field, get_memory_lock_index(target)))) {
-        for (size_t i = 0; i < set->count; i++) {
-            struct base_entry_t *entry = set->entries[i];
-            if (unlikely(entry->target == target)) {
-                write_entry_t *w_entry = (write_entry_t *) entry;
-                return w_entry_update(w_entry, source, size);
-            }
-        }
-    }
-
-    // if (unlikely(set->count > 1000))
-    //     clock_gettime(CLOCK_MONOTONIC, &t2);
-
+    if (unlikely(size != set->data_size)) return false;
+    
     // Increase capacity if needed
-    if (unlikely(set->count >= set->capacity)) {
+    LOG_DEBUG("w_set_add: adding element to set %p of size %lu and capacity %lu\n", size, set->count, set->capacity);
+    if (unlikely(set->count >= set->capacity * MAX_LOAD_FACTOR)) {
         if (unlikely(!set_grow(set))) {
             LOG_WARNING("w_set_add: failed to grow size of set %p\n", set);
             return false;
         }
+        LOG_DEBUG("w_set_add: increased capacity of set %p to %lu\n", set, set->capacity);
     }
 
-    // if (unlikely(set->count > 1000))
-    //     clock_gettime(CLOCK_MONOTONIC, &t3);
+    // See if target is already in set and update
+    size_t index = set_find(set, target);
+    LOG_DEBUG("w_set_add: target %p in set %p (set->capacity=%lu) has: hash=%lu, index=%lu\n", target, set, set->capacity, set_hash(target, set->capacity), index);
+    if (unlikely(index != set->capacity)) {
+        write_entry_t *w_entry = (write_entry_t *) set->entries[index];
+        return w_entry_update(w_entry, source, size);
+    }
 
     // Create a new write entry
     write_entry_t *entry = w_entry_create(source, size, target);
@@ -109,18 +122,8 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
         LOG_WARNING("w_set_add: failed to initialize write_entry_t in set %p\n", set);
         return false;
     }
-    set->entries[set->count++] = &entry->base;
-
-    // set memory lock field
-    set_bit(set->lock_field, get_memory_lock_index(target));
-
-    // if (unlikely(set->count > 1000)) {
-    //     clock_gettime(CLOCK_MONOTONIC, &t4);
-    
-    //     // Make sure to update the print statement to reflect the correct function name
-    //     printf("w_set_add: set size: %lu, target hash: %ld, Elapsed time: contains check: %ldns, grow: %ldns, insert: %ld \n", 
-    //         set->count, get_memory_lock_index(target), (t2.tv_nsec - t1.tv_nsec), (t3.tv_nsec - t2.tv_nsec), (t4.tv_nsec - t3.tv_nsec));
-    // }
+    w_set_add_help(set, entry);
+    set->count++;
 
     return true;
 }
@@ -128,47 +131,39 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
 bool r_set_add(struct set_t* set, void* target) {
     if (unlikely(!set)) return false;
 
-    // Check if pointer already in set
-    if (likely(get_bit(set->lock_field, get_memory_lock_index(target)))) {
-        for (size_t i = 0; i < set->count; i++) {
-            struct base_entry_t *entry = set->entries[i];
-            if (unlikely(entry->target == target)) {
-                return true;
-            }
+    // Increase capacity if needed
+    if (unlikely(set->count >= set->capacity * MAX_LOAD_FACTOR)) {
+        if (unlikely(!set_grow(set))) {
+            LOG_WARNING("w_set_add: failed to grow size of set %p\n", set);
+            return false;
         }
     }
 
-    // Increase capacity if needed
-    if (unlikely(set->count >= set->capacity)) {
-        if (unlikely(!set_grow(set))) return false;
-    }
+    // See if target is already in set and update
+    size_t index = set_find(set, target);
+    if (unlikely(index != set->capacity)) return true;
 
     // Create a new write entry
     read_entry_t *entry = r_entry_create(target);
     if (unlikely(!entry)) return false;  
-    set->entries[set->count++] = entry;
-
-    // set memory lock field
-    set_bit(set->lock_field, get_memory_lock_index(target));
+    r_set_add_help(set, entry);
+    set->count++;
 
     return true;
 }
 
 bool set_contains(struct set_t *set, void *target) {
     if (unlikely(!set)) return false;
-    // Check if pointer already in set
-    for (size_t i = 0; i < set->count; i++) {
-        if (unlikely(set->entries[i]->target == target)) return true;
-    }
-    return false;
+
+    size_t index = set_find(set, target);
+    return index != set->capacity;
 }
 
 struct base_entry_t *set_get(struct set_t *set, void *key) {
     if (unlikely(!set)) return NULL;
-    // Check if pointer already in set
-    for (size_t i = 0; i < set->count; i++) {
-        if (unlikely(set->entries[i]->target == key)) return set->entries[i];
-    }
+    
+    size_t index = set_find(set, key);
+    if (unlikely(index != set->capacity)) return set->entries[index];
     return NULL;
 }
 
@@ -176,13 +171,11 @@ bool set_read(struct set_t *set, void const *key, size_t size, void *dest) {
     if (unlikely(!set)) return false;
     if (unlikely(!set->is_write_set)) return false;     // method can only be used on write sets
     
-    for (size_t i = 0; i < set->count; i++)
-    {
-        write_entry_t *entry = (write_entry_t *)set->entries[i];
-        if (unlikely(entry->base.target == key)) {
-            memcpy(dest, entry->data, size);
-            return true;
-        }
+    size_t index = set_find(set, key);
+    if (likely(index != set->capacity)) {
+        write_entry_t *entry = (write_entry_t *)set->entries[index];
+        memcpy(dest, entry->data, size);
+        return true;
     }
     return false;
 }
@@ -191,17 +184,20 @@ void set_free(struct set_t *set) {
     if (unlikely(!set)) return;
 
     // Iterate through all entries and free the dynamically allocated resources
-    for (size_t i = 0; i < set->count; i++) {
-        if (set->is_write_set) {
-            w_entry_free((write_entry_t *)set->entries[i]);
-        }
-        else {
-            r_entry_free((read_entry_t *)set->entries[i]);
+    for (size_t i = 0; i < set->capacity; i++) {
+        if (get_bit(set->occupied_field, i)) {
+            if (set->is_write_set) {
+                w_entry_free((write_entry_t *)set->entries[i]);
+            }
+            else {
+                r_entry_free((read_entry_t *)set->entries[i]);
+            }
         }
     }
 
     // Free the dynamically allocated array of pointers
     free(set->entries);
+    free(set->occupied_field);
 
     // Free the set_t structure
     free(set);
@@ -212,14 +208,69 @@ size_t set_size(struct set_t *set) {
 }
 
 bool set_grow(struct set_t *set) {
-    size_t new_capacity = set->capacity * GROW_FACTOR;
+    size_t old_capacity = set->capacity;
+    struct base_entry_t **old_entries = set->entries;
+    uint64_t *old_occupied = set->occupied_field;
+
     // Allocate new memroy bloc of increased size
-    struct base_entry_t **new_entries = (struct base_entry_t **) realloc(set->entries, new_capacity * sizeof(struct base_entry_t *));
-    if (unlikely(!new_entries)) {
+    set->capacity *= GROW_FACTOR;
+    set->entries = calloc(set->capacity, sizeof(struct base_entry_t *));
+    set->occupied_field = calloc(set->capacity/64, sizeof(uint64_t));
+    if (unlikely(!set->entries || !set->occupied_field)) {
+        free(old_entries);
+        free(old_occupied);
         return false;
     }
-    set->entries = new_entries;
-    set->capacity = new_capacity;
 
+    for (size_t i = 0; i < old_capacity; i++) {
+        if (get_bit(old_occupied, i)) {
+            // re-hash
+            if (set->is_write_set) {
+                w_set_add_help(set, (write_entry_t *) old_entries[i]);
+            } else {
+                r_set_add_help(set, (read_entry_t *) old_entries[i]);
+            }
+        }
+    }  
+
+    free(old_entries);
+    free(old_occupied);
     return true;
+}
+
+// ============= helper methods implementation =============
+size_t set_find(struct set_t *set, void const *target) {
+    size_t index = set_hash(target, set->capacity);
+
+    // Linear probing to find the target in the table, if an empty bucket is encountered, then the value is not in the set
+    while (get_bit(set->occupied_field, index)) {
+        // LOG_DEBUG("set_find: target=%p, set->entries[%lu]=%p\n", target, index, set->entries[index]);
+        if (set->entries[index]->target == target) return index;
+        index = (index + 1) % set->capacity;
+    }
+    return set->capacity;
+}
+
+size_t set_find_next_free(struct set_t *set, void const *target) {
+    size_t index = set_hash(target, set->capacity);
+
+    // Linear probing to find the first empty slot in the table
+    while (get_bit(set->occupied_field, index)) {
+        index = (index + 1) % set->capacity;
+    }
+    return index;
+}
+
+void w_set_add_help(struct set_t *set, write_entry_t *entry) {
+    size_t index = set_find_next_free(set, entry->base.target);
+    set->entries[index] = (struct base_entry_t *)entry;
+    set_bit(set->occupied_field, index);
+    set_bit(set->lock_field, get_memory_lock_index(entry->base.target));
+}
+
+void r_set_add_help(struct set_t *set, read_entry_t *entry) {
+    size_t index = set_find_next_free(set, entry->target);
+    set->entries[index] = (struct base_entry_t *)entry;
+    set_bit(set->occupied_field, index);
+    set_bit(set->lock_field, get_memory_lock_index(entry->target));
 }

@@ -11,7 +11,6 @@
 // #include <time.h>
 
 #include "helper.h"
-#include "helper.h"
 #include "macros.h"
 
 /**
@@ -31,7 +30,6 @@ struct base_entry_t {
  */
 typedef struct write_entry_t {
     struct base_entry_t base;
-    size_t size;
     void *data;
 } write_entry_t;
 
@@ -39,12 +37,15 @@ typedef struct base_entry_t read_entry_t;
 
 /**
  * @brief read/write set implementation.
- * TODO: improve once solution works. (sort the elements progressively, use a tree, ...)
+ * TODO: improve once solution works. (sort the elements progressively, use a tree, hash table)
+ * Current implementation uses: Hash table
  */
 struct set_t {
     bool is_write_set;
+    size_t data_size;
 
     struct base_entry_t** entries;
+    uint64_t *occupied_field;
     size_t count;
     size_t capacity;
 
@@ -95,7 +96,7 @@ void w_entry_free(struct write_entry_t *entry);
  * @param is_write_set whether this is a write set (true) or read set (false)
  * @return Pointer to initialized set
  */
-struct set_t *set_init(bool is_write_set);
+struct set_t *set_init(bool is_write_set, size_t data_size);
 
 /**
  * Add an element to the write set.

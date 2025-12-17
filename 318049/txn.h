@@ -40,7 +40,7 @@ struct txn_t {
  * @return A `struct txn_t *` encoding a newly allocated `struct txn_t` on success, or
  *         `invalid_tx` on allocation failure.
  */
-struct txn_t *txn_create(bool is_ro, int rv);
+struct txn_t *txn_create(struct region_t *region, bool is_ro);
 
 /**
  * Free transaction resources and the transaction object itself.

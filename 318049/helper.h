@@ -13,6 +13,7 @@ typedef atomic_int version_clock_t; // The type of the version clock
 // map.h
 #define INITIAL_CAPACITY 8
 #define GROW_FACTOR 2
+#define MAX_LOAD_FACTOR 0.75
 
 // shared.h
 #define VLOCK_NUM 4096
@@ -34,16 +35,27 @@ static inline uintptr_t get_memory_lock_index(void const *addr) {
 
 static inline void set_bit(uint64_t bit_field[], size_t bit) {
     size_t bit_index = bit >> 6;            // division by 64
-    size_t bit_offset = bit & 0xFFFFFF;     // modulo 64
+    size_t bit_offset = bit & 0x3F;         // modulo 64
 
     bit_field[bit_index] |= (1 << bit_offset);
 }
 
 static inline bool get_bit(uint64_t bit_field[], size_t bit) {
     size_t bit_index = bit >> 6;            // division by 64
-    size_t bit_offset = bit & 0xFFFFFF;     // modulo 64
+    size_t bit_offset = bit & 0x3F;         // modulo 64
 
     return bit_field[bit_index] & (1 << bit_offset);
+}
+
+static inline size_t set_hash(void const *key, size_t capacity) {
+    uintptr_t k = (uintptr_t)key;
+    // Simple multiplicative hash
+    k ^= k >> 16;
+    k *= 0x85ebca6b;
+    k ^= k >> 13;
+    k *= 0xc2b2ae35;
+    k ^= k >> 16;
+    return k % capacity;
 }
 
 // ============== Debug ==============
@@ -62,7 +74,7 @@ static inline bool get_bit(uint64_t bit_field[], size_t bit) {
 #define LOG_LEVEL_LOG     4
 #define LOG_LEVEL_DEBUG   5
 
-#define LOG_LEVEL LOG_LEVEL_TEST
+#define LOG_LEVEL LOG_LEVEL_DEBUG
 
 static inline void debug_vprint(
     int severity,
@@ -80,6 +92,7 @@ static inline void debug_vprint(
         fprintf(stream, "%s%s %s:%d: ", msg_color, header, file, line);
         vfprintf(stream, str, args);
         fprintf(stream, "%s", COLOR_RESET);
+        fflush(stream);
         va_end(args);
     }
 }

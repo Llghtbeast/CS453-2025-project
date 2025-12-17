@@ -90,7 +90,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
     LOG_LOG("tm_begin: creating new transaction.\n");
     
     struct region_t *region = (struct region_t *) shared;
-    struct txn_t *txn = txn_create(is_ro, global_clock_load(&region->version_clock));
+    struct txn_t *txn = txn_create(region, is_ro);
 
     // If transaction creation failed, return invalid_tx
     if (unlikely(!txn)) {
@@ -111,15 +111,15 @@ bool tm_end(shared_t shared, tx_t tx) {
     struct txn_t *txn = (struct txn_t *) tx;
     struct region_t *region = (struct region_t *) shared;
 
-    LOG_LOG("tm_end: transaction %lu is ending.\n", tx);
+    LOG_TEST("tm_end: transaction %lu is ending.\n", tx);
 
     // Try committing transaction
     bool result = txn_end(txn, region);
 
     if (result == SUCCESS) {
-        LOG_LOG("tm_end: transaction %lu successfully commited.\n", tx);
+        LOG_TEST("tm_end: transaction %lu successfully commited.\n", tx);
     } else {
-        LOG_WARNING("tm_end: transaction %lu failed to commit.\n", tx);
+        LOG_TEST("tm_end: transaction %lu successfully commited.\n", tx);
     }
 
     // Free transaction and return

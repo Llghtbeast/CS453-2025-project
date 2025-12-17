@@ -17,7 +17,7 @@ static void txn_unlock(struct txn_t *txn, struct region_t *region, size_t last, 
 
 // ============================================= global functions =============================================
 
-struct txn_t *txn_create(bool is_ro, int rv) {
+struct txn_t *txn_create(struct region_t *region, bool is_ro) {
     struct txn_t *txn = malloc(sizeof(struct txn_t));
     if (unlikely(!txn)) {
         LOG_WARNING("txn_create: memory allocation for transaction failed!\n");
@@ -25,16 +25,16 @@ struct txn_t *txn_create(bool is_ro, int rv) {
     }
 
     txn->is_ro = is_ro;
-    txn->rv = rv;
+    txn->rv = global_clock_load(&region->version_clock);
     txn->wv = INVALID;       // invalid write version
 
-    txn->r_set = set_init(false);
+    txn->r_set = set_init(false, region->align);
     if (unlikely(!txn->r_set)) {
         LOG_WARNING("txn_create: read set_init failed!\n");
         free(txn);
         return NULL;
     }
-    txn->w_set = set_init(true);
+    txn->w_set = set_init(true, region->align);
     if (unlikely(!txn->w_set)) {
         LOG_WARNING("txn_create: write set_init failed!\n");
         set_free(txn->w_set);
@@ -221,7 +221,7 @@ static void txn_w_commit(struct set_t *ws) {
     // Iterate through write set and write values
     for (size_t i = 0; i < ws->count; i++) {
         write_entry_t *we = (write_entry_t *) ws->entries[i];
-        memcpy(we->base.target, we->data, we->size);
+        memcpy(we->base.target, we->data, ws->data_size);
     }
 }
 
