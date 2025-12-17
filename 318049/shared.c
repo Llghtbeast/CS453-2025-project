@@ -82,7 +82,7 @@ struct segment_node_t *region_alloc(struct region_t *region, size_t size) {
     alloc_mutex_acquire(&region->alloc_lock);
     node->prev = NULL;
     node->next = region->allocs;
-    if (node->next) node->next->prev = node;
+    if (unlikely(node->next)) node->next->prev = node;
     region->allocs = node;
     alloc_mutex_release(&region->alloc_lock);
 
@@ -92,9 +92,9 @@ struct segment_node_t *region_alloc(struct region_t *region, size_t size) {
 bool region_free(struct region_t *region, struct segment_node_t *node) {
     // Remove from the linked list
     alloc_mutex_acquire(&region->alloc_lock);
-    if (node->prev) node->prev->next = node->next;
+    if (unlikely(node->prev)) node->prev->next = node->next;
     else region->allocs = node->next;
-    if (node->next) node->next->prev = node->prev;
+    if (unlikely(node->next)) node->next->prev = node->prev;
     alloc_mutex_release(&region->alloc_lock);
 
     free(node);

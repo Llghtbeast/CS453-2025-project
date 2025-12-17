@@ -31,7 +31,7 @@ write_entry_t *w_entry_create(void const *source, size_t size, void *target) {
 
 bool w_entry_update(write_entry_t *entry, void const *source, size_t size) {
     if (unlikely(!entry)) return false;
-    if (size != entry->size) return false;
+    if (unlikely(size != entry->size)) return false;
 
     // Update write entry
     memcpy(entry->data, source, size);
@@ -77,15 +77,15 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
     // Check if pointer already in set
     for (size_t i = 0; i < set->count; i++) {
         struct base_entry_t *entry = set->entries[i];
-        if (entry->target == target) {
+        if (unlikely(entry->target == target)) {
             write_entry_t *w_entry = (write_entry_t *) entry;
             return w_entry_update(w_entry, source, size);
         }
     }
 
     // Increase capacity if needed
-    if (set->count >= set->capacity) {
-        if (!set_grow(set)) {
+    if (unlikely(set->count >= set->capacity)) {
+        if (unlikely(!set_grow(set))) {
             LOG_WARNING("w_set_add: failed to grow size of set %p\n", set);
             return false;
         }
@@ -93,7 +93,7 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
 
     // Create a new write entry
     write_entry_t *entry = w_entry_create(source, size, target);
-    if (!entry) {
+    if (unlikely(!entry)) {
         LOG_WARNING("w_set_add: failed to initialize write_entry_t in set %p\n", set);
         return false;
     }
@@ -108,19 +108,19 @@ bool r_set_add(struct set_t* set, void* target) {
     // Check if pointer already in set
     for (size_t i = 0; i < set->count; i++) {
         struct base_entry_t *entry = set->entries[i];
-        if (entry->target == target) {
+        if (unlikely(entry->target == target)) {
             return true;
         }
     }
 
     // Increase capacity if needed
-    if (set->count >= set->capacity) {
-        if (!set_grow(set)) return false;
+    if (unlikely(set->count >= set->capacity)) {
+        if (unlikely(!set_grow(set))) return false;
     }
 
     // Create a new write entry
     read_entry_t *entry = r_entry_create(target);
-    if (!entry) return false;  
+    if (unlikely(!entry)) return false;  
     set->entries[set->count++] = entry;
 
     return true;
@@ -130,7 +130,7 @@ bool set_contains(struct set_t *set, void *target) {
     if (unlikely(!set)) return false;
     // Check if pointer already in set
     for (size_t i = 0; i < set->count; i++) {
-        if (set->entries[i]->target == target) return true;
+        if (unlikely(set->entries[i]->target == target)) return true;
     }
     return false;
 }
@@ -139,7 +139,7 @@ struct base_entry_t *set_get(struct set_t *set, void *key) {
     if (unlikely(!set)) return NULL;
     // Check if pointer already in set
     for (size_t i = 0; i < set->count; i++) {
-        if (set->entries[i]->target == key) return set->entries[i];
+        if (unlikely(set->entries[i]->target == key)) return set->entries[i];
     }
     return NULL;
 }
@@ -151,7 +151,7 @@ bool set_read(struct set_t *set, void const *key, size_t size, void *dest) {
     for (size_t i = 0; i < set->count; i++)
     {
         write_entry_t *entry = (write_entry_t *)set->entries[i];
-        if (entry->base.target == key) {
+        if (unlikely(entry->base.target == key)) {
             memcpy(dest, entry->data, size);
             return true;
         }
@@ -187,7 +187,7 @@ bool set_grow(struct set_t *set) {
     size_t new_capacity = set->capacity * GROW_FACTOR;
     // Allocate new memroy bloc of increased size
     struct base_entry_t **new_entries = (struct base_entry_t **) realloc(set->entries, new_capacity * sizeof(struct base_entry_t *));
-    if (!new_entries) {
+    if (unlikely(!new_entries)) {
         return false;
     }
     set->entries = new_entries;

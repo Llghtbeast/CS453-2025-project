@@ -41,7 +41,7 @@ shared_t tm_create(size_t size, size_t align) {
     
     struct region_t *region = region_create(size, align);
     // If shared memory region allocation failed, return invalid_shared
-    if (!region) {
+    if (unlikely(!region)) {
         LOG_WARNING("tm_create: transactional machine shared memory region creation failed.\n");
         return invalid_shared;
     } 
@@ -93,7 +93,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
     struct txn_t *txn = txn_create(is_ro, global_clock_load(&region->version_clock));
 
     // If transaction creation failed, return invalid_tx
-    if (!txn) {
+    if (unlikely(!txn)) {
         LOG_WARNING("tm_begin: transaction creation failed.\n");
         return invalid_tx;
     }
@@ -180,7 +180,7 @@ alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
     LOG_LOG("tm_alloc: transaction %lu is allocating %lu bytes\n", tx, size);
 
     struct segment_node_t *node = region_alloc((struct region_t *) shared, size);
-    if (!node) {
+    if (unlikely(!node)) {
         LOG_WARNING("tm_alloc: transaction %lu allocation failed\n", tx);
         return nomem_alloc;
     } 
