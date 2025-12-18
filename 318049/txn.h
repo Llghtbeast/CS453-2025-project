@@ -1,6 +1,5 @@
 #pragma once
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -12,7 +11,8 @@
 #include "v_lock.h"
 #include "map.h"
 #include "macros.h"
-#include "shared.h"
+
+struct region_t; // Forward declaration
 
 struct txn_t {
     bool is_ro;
@@ -23,9 +23,9 @@ struct txn_t {
     struct set_t *r_set;
     struct set_t *w_set;
 
-    // add bloom set
-
-    // add container with pointers to to-free memory regions
+    // container with pointers to to-free memory regions
+    void **to_free;
+    size_t to_free_count;
 };
 
 /**
@@ -50,9 +50,16 @@ struct txn_t *txn_create(struct region_t *region, bool is_ro);
  * `txn_create` or other internal helpers). If `tx == invalid_tx` the call is
  * a no-op.
  *
- * @param txn Transaction to free.
+ * @param txn Transaction to destroy.
  */
-void txn_free(struct txn_t *txn);
+void txn_destroy(struct txn_t *txn);
+
+/** Schedule a memory freeing in the given transaction.
+ * @param txn    transaction
+ * @param target Address of the first byte of the previously allocated segment to deallocate
+ * @return Whether the whole transaction can continue
+**/
+bool txn_schedule_to_free(struct txn_t *txn, void *target);
 
 /**
  * @return Whether the transaction is read-only or not

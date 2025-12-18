@@ -27,9 +27,9 @@ else
 endif
 
 CC       := $(CC)
-CCFLAGS  := -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) -std=c11 -fPIC -I$(INCLUDE_DIR)
+CCFLAGS  := -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) -std=c11 -fPIC -I$(INCLUDE_DIR)
 CXX      := $(CXX)
-CXXFLAGS := -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) -std=c++17 -fPIC -I$(INCLUDE_DIR)
+CXXFLAGS := -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wfatal-errors $(DB_OPTS) $(DBG_SYM) -std=c++17 -fPIC -I$(INCLUDE_DIR)
 LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
 LDFLAGS  := -shared $(DBG_SYM)
 LDLIBS   := -lpthread

@@ -1,4 +1,5 @@
 #include "txn.h"
+#include "shared.h"
 
 // ------- txn_end helper -------
 
@@ -42,12 +43,14 @@ struct txn_t *txn_create(struct region_t *region, bool is_ro) {
         return NULL;
     }
 
+    txn->to_free = NULL;
+    txn->to_free_count = 0;
+
     // LOG_NOTE("txn_create: transaction %lu created.\n", (tx_t) txn);
     return txn;
 }
 
-void txn_free(struct txn_t *txn) {
-    // LOG_NOTE("txn_free: transaction %lu called to be freed.\n", (tx_t) txn);
+void txn_destroy(struct txn_t *txn) {
     if (unlikely(!txn)) return;
     
     set_free(txn->r_set);
@@ -55,7 +58,15 @@ void txn_free(struct txn_t *txn) {
     free(txn);
 }
 
-bool txn_is_ro(struct txn_t * txn) {
+bool txn_schedule_to_free(struct txn_t *txn, void *target) {
+    txn->to_free = realloc(txn->to_free, (txn->to_free_count + 1) * sizeof(void *));
+    if (unlikely(!txn->to_free)) return ABORT;
+
+    txn->to_free[txn->to_free_count++] = target;
+    return SUCCESS;
+}
+
+bool txn_is_ro(struct txn_t *txn) {
     return txn->is_ro;
 }
 
@@ -83,7 +94,7 @@ bool txn_read(struct txn_t *txn, struct region_t *region, void const *source, si
         int lv_pre = v_lock_version(lock);
         if ((lv_pre == LOCKED) || (lv_pre > txn->rv)) {
             LOG_WARNING("txn_read: transaction %lu failed lock PRE-validation for source: %p -> lock %p!\n", (tx_t) txn, source_addr, lock);
-            // txn_free(txn);
+            // txn_destroy(txn);
             return ABORT; 
         }
 
@@ -93,7 +104,7 @@ bool txn_read(struct txn_t *txn, struct region_t *region, void const *source, si
         int lv_post = v_lock_version(lock);
         if ((lv_post == LOCKED) || (lv_post != lv_pre)) {
             LOG_WARNING("txn_read: transaction %lu failed lock POST-validation for source: %p -> lock %p\n", (tx_t) txn, source_addr, lock);
-            // txn_free(txn);
+            // txn_destroy(txn);
             return ABORT; 
         }
 
@@ -101,7 +112,7 @@ bool txn_read(struct txn_t *txn, struct region_t *region, void const *source, si
             // Add to read set
             if (unlikely(!r_set_add(txn->r_set, source_addr))) {
                 LOG_WARNING("txn_read: transaction %lu failed add source: %p to read-set!\n", (tx_t) txn, source_addr);
-                // txn_free(txn);
+                // txn_destroy(txn);
                 // exit(1);
                 return ABORT;
             }
@@ -120,7 +131,7 @@ bool txn_write(struct txn_t *txn, struct region_t *region, void const *source, s
         // Add to write set
         if (unlikely(!w_set_add(txn->w_set, source_addr, word_size, target_addr))) {
             LOG_WARNING("txn_write: transaction %lu failed to add entry {source: %p, target: %p, size: %p} to write set!\n", (tx_t) txn, source_addr, target_addr, word_size);
-            // txn_free(txn);
+            // txn_destroy(txn);
             // exit(1);
             return ABORT;
         }
@@ -129,6 +140,9 @@ bool txn_write(struct txn_t *txn, struct region_t *region, void const *source, s
 }
 
 bool txn_end(struct txn_t *txn, struct region_t *region) {
+    // append scheduled memory frees to region
+    region_append_to_free(region, txn->to_free, txn->to_free_count);
+
     // If transaction is read only or no writes occured (effectively read-only), directly commit
     if (txn->is_ro || txn->w_set->count == 0) return SUCCESS;
 

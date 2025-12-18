@@ -17,6 +17,8 @@ typedef atomic_int version_clock_t; // The type of the version clock
 
 // shared.h
 #define VLOCK_NUM 4096
+#define INITIAL_TO_FREE_CAPACITY 64
+#define SEGMENT_FREE_BATCH_SIZE 128
 
 // txn.h
 #define ABORT false

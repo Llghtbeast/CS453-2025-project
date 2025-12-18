@@ -62,14 +62,3 @@ void global_clock_cleanup(global_clock_t *global_clock);
 int global_clock_load(global_clock_t *global_clock);
 
 int global_clock_increment_and_fetch(global_clock_t *global_clock);
-
-// ============= Segment allocation lock implementation ============= 
-typedef pthread_mutex_t alloc_mutex_t;
-
-int alloc_mutex_init(alloc_mutex_t *lock);
-
-int alloc_mutex_cleanup(alloc_mutex_t *lock);
-
-int alloc_mutex_acquire(alloc_mutex_t *lock);
-
-int alloc_mutex_release(alloc_mutex_t *lock);

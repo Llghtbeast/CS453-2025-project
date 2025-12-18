@@ -3,10 +3,10 @@
 // Requested feature: posix_memalign
 #define _POSIX_C_SOURCE   200809L
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 #include "helper.h"
 #include "v_lock.h"
@@ -27,9 +27,11 @@ typedef struct segment_node_t* segment_list;
  * @brief List of shared memory segments
  */
 struct region_t {
-    pthread_mutex_t alloc_lock;     // Lock to seize when allocating new memory block
-    v_lock_t v_locks[VLOCK_NUM];    // Lock to acquire when writing to corresponding word in memory
-    global_clock_t version_clock;  // Global version lock
+    pthread_rwlock_t free_lock;             // Lock to size in write mode to free, in read mode for any active transaction
+    pthread_mutex_t append_to_free_lock;    // Lock to seize to append region to free
+    pthread_mutex_t alloc_lock;             // Lock to seize when allocating new memory block
+    v_lock_t v_locks[VLOCK_NUM];            // Lock to acquire when writing to corresponding word in memory
+    global_clock_t version_clock;           // Global version lock
     
     void* start;
     size_t size;
@@ -37,6 +39,10 @@ struct region_t {
     
     segment_list allocs;
     segment_list last;
+
+    void **to_free;
+    size_t to_free_capacity;
+    size_t to_free_count;
 };
 
 struct region_t *region_create(size_t size, size_t align);
@@ -53,7 +59,9 @@ int region_update_version_clock(struct region_t *);
 
 struct segment_node_t *region_alloc(struct region_t *, size_t size);
 
-bool region_free(struct region_t *, struct segment_node_t *node);
+bool region_append_to_free(struct region_t *, void** txn_to_free, size_t txn_to_free_count);
+
+bool region_free(struct region_t *);
 
 uintptr_t get_memory_lock_index(void const *addr);
 

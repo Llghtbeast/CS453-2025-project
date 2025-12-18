@@ -90,6 +90,8 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
     LOG_LOG("tm_begin: creating new transaction.\n");
     
     struct region_t *region = (struct region_t *) shared;
+    pthread_rwlock_rdlock(&region->free_lock);      // Stops another transaction from freeing any shared memory regions
+
     struct txn_t *txn = txn_create(region, is_ro);
 
     // If transaction creation failed, return invalid_tx
@@ -115,13 +117,19 @@ bool tm_end(shared_t shared, tx_t tx) {
     bool result = txn_end(txn, region);
 
     if (result == SUCCESS) {
-        LOG_LOG("tm_end: transaction %lu successfully commited.\n", tx);
+        LOG_TEST("tm_end: transaction %lu successfully commited.\n", tx);
     } else {
         LOG_WARNING("tm_end: transaction %lu successfully commited.\n", tx);
     }
 
+    pthread_rwlock_unlock(&region->free_lock);      // Release lock to allow a transaction to free a batch of shared memory segments
+
+    // free a batch shared memory segments
+    if (region->to_free_count >= SEGMENT_FREE_BATCH_SIZE)
+        region_free(region);
+
     // Free transaction and return
-    txn_free(txn);
+    txn_destroy(txn);
     return result;
 }
 
@@ -199,10 +207,6 @@ alloc_t tm_alloc(shared_t shared, tx_t unused(tx), size_t size, void** target) {
  * @param target Address of the first byte of the previously allocated segment to deallocate
  * @return Whether the whole transaction can continue
 **/
-bool tm_free(shared_t unused(shared), tx_t unused(tx), void* unused(target)) {
-    // struct region_t *region = (struct region_t *) shared;
-    // struct segment_node_t* node = (struct segment_node_t*) ((uintptr_t) target - sizeof(struct segment_node_t));
-    
-    // return region_free(region, node);
-    return true;
+bool tm_free(shared_t unused(shared), tx_t tx, void* target) {
+    return txn_schedule_to_free((struct txn_t *) tx, target);
 }
