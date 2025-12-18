@@ -123,6 +123,7 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
         return false;
     }
     w_set_add_help(set, entry);
+    set_bit(set->lock_field, get_memory_lock_index(entry->base.target));
     set->count++;
 
     return true;
@@ -147,6 +148,7 @@ bool r_set_add(struct set_t* set, void* target) {
     read_entry_t *entry = r_entry_create(target);
     if (unlikely(!entry)) return false;  
     r_set_add_help(set, entry);
+    set_bit(set->lock_field, get_memory_lock_index(entry->target));
     set->count++;
 
     return true;
@@ -208,6 +210,7 @@ size_t set_size(struct set_t *set) {
 }
 
 bool set_grow(struct set_t *set) {
+    if (unlikely(!set)) return false;
     size_t old_capacity = set->capacity;
     struct base_entry_t **old_entries = set->entries;
     uint64_t *old_occupied = set->occupied_field;
@@ -222,16 +225,30 @@ bool set_grow(struct set_t *set) {
         return false;
     }
 
+    // LOG_DEBUG("set_grow: MAKING SURE THAT REALLOCATION IS 0: printing set->occupied_field and set->entries for set %p: \n", set);
+    // for (size_t i = 0; i < set->capacity; i++) {
+    //     LOG_DEBUG("set_grow: set: %p, get_bit(set->occupied_field, %d) = %d\n", set, i, get_bit(set->occupied_field, i));
+    //     LOG_DEBUG("set_grow: set: %p, set->entries[%d] = %p\n", set, i, set->entries[i]);
+    // }
+
     for (size_t i = 0; i < old_capacity; i++) {
         if (get_bit(old_occupied, i)) {
             // re-hash
+            LOG_DEBUG("set_grow: set %p: re-hashing entry %p at index %lu\n", set, old_entries[i], i);
             if (set->is_write_set) {
                 w_set_add_help(set, (write_entry_t *) old_entries[i]);
             } else {
                 r_set_add_help(set, (read_entry_t *) old_entries[i]);
             }
         }
-    }  
+    }
+
+    LOG_DEBUG("set_grow: printing set->occupied_field and set->entries for set %p: \n", set);
+    for (size_t i = 0; i < set->capacity; i++) {
+        LOG_DEBUG("set_grow: set: %p, get_bit(set->occupied_field, %d) = %d\n", set, i, get_bit(set->occupied_field, i));
+        LOG_DEBUG("set_grow: set: %p, set->entries[%d] = %p\n", set, i, set->entries[i]);
+    }
+    
 
     free(old_entries);
     free(old_occupied);
@@ -241,10 +258,11 @@ bool set_grow(struct set_t *set) {
 // ============= helper methods implementation =============
 size_t set_find(struct set_t *set, void const *target) {
     size_t index = set_hash(target, set->capacity);
+    LOG_DEBUG("set_find: target=%p, set->entries[%lu]=%p\n", target, index, set->entries[index]);
 
     // Linear probing to find the target in the table, if an empty bucket is encountered, then the value is not in the set
     while (get_bit(set->occupied_field, index)) {
-        // LOG_DEBUG("set_find: target=%p, set->entries[%lu]=%p\n", target, index, set->entries[index]);
+        LOG_DEBUG("set_find: target=%p, trying index: %lu, occupied: %d\n", target, index, get_bit(set->occupied_field, index));
         if (set->entries[index]->target == target) return index;
         index = (index + 1) % set->capacity;
     }
@@ -263,14 +281,14 @@ size_t set_find_next_free(struct set_t *set, void const *target) {
 
 void w_set_add_help(struct set_t *set, write_entry_t *entry) {
     size_t index = set_find_next_free(set, entry->base.target);
+    LOG_DEBUG("w_set_add_help: set %p adding entry %p at index %lu\n", set, entry, index);
+
     set->entries[index] = (struct base_entry_t *)entry;
     set_bit(set->occupied_field, index);
-    set_bit(set->lock_field, get_memory_lock_index(entry->base.target));
 }
 
 void r_set_add_help(struct set_t *set, read_entry_t *entry) {
     size_t index = set_find_next_free(set, entry->target);
     set->entries[index] = (struct base_entry_t *)entry;
     set_bit(set->occupied_field, index);
-    set_bit(set->lock_field, get_memory_lock_index(entry->target));
 }

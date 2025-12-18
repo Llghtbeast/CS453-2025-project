@@ -7,8 +7,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-// #include <stdio.h>
-// #include <time.h>
 
 #include "helper.h"
 #include "macros.h"

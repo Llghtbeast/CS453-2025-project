@@ -204,14 +204,16 @@ static bool txn_set_wv(struct txn_t *txn, int wv) {
 
 static bool txn_validate_r_set(struct region_t *region, struct set_t *rs, int rv) {
     // Iterate through read set
-    for (size_t i = 0; i < rs->count; i++) {
-        read_entry_t *entry = rs->entries[i];
-        v_lock_t *lock = region_get_memory_lock_from_ptr(region, entry->target);
-
-        int lv = v_lock_version(lock);
-        // If lock is not acquirable or the lock version clock is higher than tx->rv, abort.
-        if (lv == LOCKED || lv > rv) {
-            return ABORT;
+    for (size_t i = 0; i < rs->capacity; i++) {
+        if (get_bit(rs->occupied_field, i)) {
+            read_entry_t *entry = rs->entries[i];
+            v_lock_t *lock = region_get_memory_lock_from_ptr(region, entry->target);
+    
+            int lv = v_lock_version(lock);
+            // If lock is not acquirable or the lock version clock is higher than tx->rv, abort.
+            if (lv == LOCKED || lv > rv) {
+                return ABORT;
+            }
         }
     }
     return SUCCESS;
@@ -219,9 +221,11 @@ static bool txn_validate_r_set(struct region_t *region, struct set_t *rs, int rv
 
 static void txn_w_commit(struct set_t *ws) {
     // Iterate through write set and write values
-    for (size_t i = 0; i < ws->count; i++) {
-        write_entry_t *we = (write_entry_t *) ws->entries[i];
-        memcpy(we->base.target, we->data, ws->data_size);
+    for (size_t i = 0; i < ws->capacity; i++) {
+        if (get_bit(ws->occupied_field, i)) {
+            write_entry_t *we = (write_entry_t *) ws->entries[i];
+            memcpy(we->base.target, we->data, ws->data_size);
+        }
     }
 }
 

@@ -11,7 +11,7 @@
 typedef atomic_int version_clock_t; // The type of the version clock
 
 // map.h
-#define INITIAL_CAPACITY 8
+#define INITIAL_CAPACITY 256
 #define GROW_FACTOR 2
 #define MAX_LOAD_FACTOR 0.75
 
@@ -37,14 +37,14 @@ static inline void set_bit(uint64_t bit_field[], size_t bit) {
     size_t bit_index = bit >> 6;            // division by 64
     size_t bit_offset = bit & 0x3F;         // modulo 64
 
-    bit_field[bit_index] |= (1 << bit_offset);
+    bit_field[bit_index] |= (1ULL << bit_offset);
 }
 
 static inline bool get_bit(uint64_t bit_field[], size_t bit) {
     size_t bit_index = bit >> 6;            // division by 64
     size_t bit_offset = bit & 0x3F;         // modulo 64
 
-    return bit_field[bit_index] & (1 << bit_offset);
+    return bit_field[bit_index] & (1ULL << bit_offset);
 }
 
 static inline size_t set_hash(void const *key, size_t capacity) {
@@ -74,7 +74,7 @@ static inline size_t set_hash(void const *key, size_t capacity) {
 #define LOG_LEVEL_LOG     4
 #define LOG_LEVEL_DEBUG   5
 
-#define LOG_LEVEL LOG_LEVEL_DEBUG
+#define LOG_LEVEL LOG_LEVEL_RELEASE
 
 static inline void debug_vprint(
     int severity,

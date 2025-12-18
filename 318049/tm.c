@@ -111,15 +111,13 @@ bool tm_end(shared_t shared, tx_t tx) {
     struct txn_t *txn = (struct txn_t *) tx;
     struct region_t *region = (struct region_t *) shared;
 
-    LOG_TEST("tm_end: transaction %lu is ending.\n", tx);
-
     // Try committing transaction
     bool result = txn_end(txn, region);
 
     if (result == SUCCESS) {
-        LOG_TEST("tm_end: transaction %lu successfully commited.\n", tx);
+        LOG_LOG("tm_end: transaction %lu successfully commited.\n", tx);
     } else {
-        LOG_TEST("tm_end: transaction %lu successfully commited.\n", tx);
+        LOG_WARNING("tm_end: transaction %lu successfully commited.\n", tx);
     }
 
     // Free transaction and return

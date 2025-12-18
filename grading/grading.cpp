@@ -387,17 +387,10 @@ static bool check_shortcuts(TransactionalLibrary& tl, Seed seed) {
             TransactionalMemory tm{tl, word_size, tm_size};
             ::std::cout << "⎪ Writing to all pages (multiple times)..." << ::std::endl;
             transactional(tm, Transaction::Mode::read_write, [&](auto& tx) {
-                for (int i = 0; i < 8; i++) {
-                    auto start = ::std::chrono::steady_clock::now();
+                for (int i = 0; i < 8; i++)
                     for (auto* p = (uint8_t*)tm.get_start(); p < (uint8_t*)tm.get_start() + tm_size; p += 4096)
                         tx.write(reference.data(), word_size, p);
-    
-                    auto end = ::std::chrono::steady_clock::now();
-                    ::std::cout << "| finished write " << i << " in " << ::std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << ::std::endl;
-                }
             });
-            auto m1 = ::std::chrono::steady_clock::now();
-            ::std::cout << "| finished initial writes in " << (m1 - t1).count() << "ms" << ::std::endl;
             for (int i = 0; i < 16; i++) {
                 auto word = word_dist(rng);
                 auto offset = word * word_size;
