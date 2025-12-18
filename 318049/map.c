@@ -68,17 +68,21 @@ struct set_t *set_init(bool is_write_set, size_t data_size) {
     // Allocate memory for the set_t structure
     struct set_t *set = (struct set_t *)malloc(sizeof(struct set_t));
     if (unlikely(!set)) {
+        LOG_TEST("set_init: initial set allocation failed!\n");
         return NULL;
     }
 
     set->entries = calloc(INITIAL_CAPACITY, sizeof(struct base_entry_t *));
     if (unlikely(!set->entries)) {
+        LOG_TEST("set_init: set->entries allocation failed!\n");
         free(set);
         return NULL;
     }
 
-    set->occupied_field = calloc(INITIAL_CAPACITY/64, sizeof(uint64_t));
+    size_t num_words = (INITIAL_CAPACITY + 63) / 64;
+    set->occupied_field = calloc(num_words, sizeof(uint64_t));
     if (unlikely(!set->occupied_field)) {
+        LOG_TEST("set_init: set->occupied_field allocation failed!\n");
         free(set->entries);
         free(set);
         return NULL;
@@ -89,7 +93,6 @@ struct set_t *set_init(bool is_write_set, size_t data_size) {
     set->data_size = data_size;
     set->count = 0;
     set->capacity = INITIAL_CAPACITY;
-    memset(set->lock_field, 0, sizeof(set->lock_field));
   
     return set;
 }
@@ -123,7 +126,6 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
         return false;
     }
     w_set_add_help(set, entry);
-    set_bit(set->lock_field, get_memory_lock_index(entry->base.target));
     set->count++;
 
     return true;
@@ -148,7 +150,6 @@ bool r_set_add(struct set_t* set, void* target) {
     read_entry_t *entry = r_entry_create(target);
     if (unlikely(!entry)) return false;  
     r_set_add_help(set, entry);
-    set_bit(set->lock_field, get_memory_lock_index(entry->target));
     set->count++;
 
     return true;
@@ -218,23 +219,18 @@ bool set_grow(struct set_t *set) {
     // Allocate new memroy bloc of increased size
     set->capacity *= GROW_FACTOR;
     set->entries = calloc(set->capacity, sizeof(struct base_entry_t *));
-    set->occupied_field = calloc(set->capacity/64, sizeof(uint64_t));
+
+    size_t num_words = (set->capacity + 63) / 64;
+    set->occupied_field = calloc(num_words, sizeof(uint64_t));
     if (unlikely(!set->entries || !set->occupied_field)) {
         free(old_entries);
         free(old_occupied);
         return false;
     }
 
-    // LOG_DEBUG("set_grow: MAKING SURE THAT REALLOCATION IS 0: printing set->occupied_field and set->entries for set %p: \n", set);
-    // for (size_t i = 0; i < set->capacity; i++) {
-    //     LOG_DEBUG("set_grow: set: %p, get_bit(set->occupied_field, %d) = %d\n", set, i, get_bit(set->occupied_field, i));
-    //     LOG_DEBUG("set_grow: set: %p, set->entries[%d] = %p\n", set, i, set->entries[i]);
-    // }
-
     for (size_t i = 0; i < old_capacity; i++) {
         if (get_bit(old_occupied, i)) {
             // re-hash
-            LOG_DEBUG("set_grow: set %p: re-hashing entry %p at index %lu\n", set, old_entries[i], i);
             if (set->is_write_set) {
                 w_set_add_help(set, (write_entry_t *) old_entries[i]);
             } else {
@@ -243,26 +239,33 @@ bool set_grow(struct set_t *set) {
         }
     }
 
-    LOG_DEBUG("set_grow: printing set->occupied_field and set->entries for set %p: \n", set);
-    for (size_t i = 0; i < set->capacity; i++) {
-        LOG_DEBUG("set_grow: set: %p, get_bit(set->occupied_field, %d) = %d\n", set, i, get_bit(set->occupied_field, i));
-        LOG_DEBUG("set_grow: set: %p, set->entries[%d] = %p\n", set, i, set->entries[i]);
-    }
-    
-
     free(old_entries);
     free(old_occupied);
     return true;
 }
 
+void set_get_lock_field(struct set_t *set, uint64_t *lock_field) {
+    if (unlikely(!set || !lock_field)) return;
+    if (unlikely(!set->is_write_set)) return;   // Can only use on write sets
+
+    memset(lock_field, 0, (VLOCK_NUM / 64) * sizeof(uint64_t));
+
+    for (size_t i = 0; i < set->capacity; i++) {
+        if (get_bit(set->occupied_field, i)) {
+            void *target = set->entries[i]->target;
+            int lock_index = get_memory_lock_index(target);
+        
+            set_bit(lock_field, lock_index);
+        }
+    }
+}
+
 // ============= helper methods implementation =============
 size_t set_find(struct set_t *set, void const *target) {
     size_t index = set_hash(target, set->capacity);
-    LOG_DEBUG("set_find: target=%p, set->entries[%lu]=%p\n", target, index, set->entries[index]);
 
     // Linear probing to find the target in the table, if an empty bucket is encountered, then the value is not in the set
     while (get_bit(set->occupied_field, index)) {
-        LOG_DEBUG("set_find: target=%p, trying index: %lu, occupied: %d\n", target, index, get_bit(set->occupied_field, index));
         if (set->entries[index]->target == target) return index;
         index = (index + 1) % set->capacity;
     }
@@ -281,8 +284,6 @@ size_t set_find_next_free(struct set_t *set, void const *target) {
 
 void w_set_add_help(struct set_t *set, write_entry_t *entry) {
     size_t index = set_find_next_free(set, entry->base.target);
-    LOG_DEBUG("w_set_add_help: set %p adding entry %p at index %lu\n", set, entry, index);
-
     set->entries[index] = (struct base_entry_t *)entry;
     set_bit(set->occupied_field, index);
 }

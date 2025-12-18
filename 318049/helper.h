@@ -11,7 +11,7 @@
 typedef atomic_int version_clock_t; // The type of the version clock
 
 // map.h
-#define INITIAL_CAPACITY 256
+#define INITIAL_CAPACITY 4
 #define GROW_FACTOR 2
 #define MAX_LOAD_FACTOR 0.75
 
@@ -74,7 +74,7 @@ static inline size_t set_hash(void const *key, size_t capacity) {
 #define LOG_LEVEL_LOG     4
 #define LOG_LEVEL_DEBUG   5
 
-#define LOG_LEVEL LOG_LEVEL_RELEASE
+#define LOG_LEVEL LOG_LEVEL_TEST
 
 static inline void debug_vprint(
     int severity,

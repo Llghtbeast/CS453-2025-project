@@ -46,8 +46,6 @@ struct set_t {
     uint64_t *occupied_field;
     size_t count;
     size_t capacity;
-
-    uint64_t lock_field[VLOCK_NUM/64];
 };
 
 // ============== entry_t methods ============== 
@@ -157,3 +155,5 @@ size_t set_size(struct set_t *set);
  * @return Whether the operation was a success
  */
 bool set_grow(struct set_t *set);
+
+void set_get_lock_field(struct set_t *set, uint64_t *lock_field);

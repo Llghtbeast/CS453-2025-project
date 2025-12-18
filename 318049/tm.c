@@ -94,7 +94,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
 
     // If transaction creation failed, return invalid_tx
     if (unlikely(!txn)) {
-        LOG_WARNING("tm_begin: transaction creation failed.\n");
+        LOG_TEST("tm_begin: transaction creation failed.\n");
         return invalid_tx;
     }
     LOG_LOG("tm_begin: transaction %lu was successfully created.\n", (tx_t) txn);

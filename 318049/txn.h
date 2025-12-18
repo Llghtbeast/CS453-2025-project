@@ -9,6 +9,7 @@
 
 #include "helper.h"
 #include "tm.h"
+#include "v_lock.h"
 #include "map.h"
 #include "macros.h"
 #include "shared.h"
