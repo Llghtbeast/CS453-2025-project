@@ -15,6 +15,7 @@ struct region_t *region_create(size_t size, size_t align) {
     // Allocating to_free memory region
     region->to_free_count = 0;
     region->to_free_capacity = INITIAL_TO_FREE_CAPACITY;
+    region->to_free_cum_size = 0;
     region->to_free = malloc(region->to_free_capacity * sizeof(region->to_free_capacity));
     if (unlikely(!region->to_free)) {
         free(region->start);
@@ -96,6 +97,7 @@ struct segment_node_t *region_alloc(struct region_t *region, size_t size) {
     if (unlikely(posix_memalign((void**)&node, align, sizeof(struct segment_node_t) + size) != 0)) // Allocation failed
         return NULL;
 
+    node->size = size;
     // Insert in the linked list
     pthread_mutex_lock(&region->alloc_lock);
     node->prev = NULL;
@@ -111,9 +113,9 @@ bool region_append_to_free(struct region_t *region, void** txn_to_free, size_t t
     // Append to_free list to the end of region->to_free list
     pthread_mutex_lock(&region->append_to_free_lock);
     // Increase size of to_free dynamic array if needed
-    if (region->to_free_count + txn_to_free_count > region->to_free_capacity) {
+    if (unlikely(region->to_free_count + txn_to_free_count > region->to_free_capacity)) {
         region->to_free_capacity *= GROW_FACTOR;
-        region->to_free = realloc(region->to_free, region->to_free_capacity * sizeof(void *));
+        region->to_free = realloc(region->to_free, region->to_free_capacity * sizeof(struct segment_node_t *));
         if (unlikely(!region->to_free)) {
             pthread_mutex_unlock(&region->append_to_free_lock);
             return false;
@@ -122,7 +124,20 @@ bool region_append_to_free(struct region_t *region, void** txn_to_free, size_t t
 
     // Append the new to_free pointers
     for (size_t i = 0; i < txn_to_free_count; i++) {
-        region->to_free[region->to_free_count++] = txn_to_free[i];
+        bool is_duplicate = false;
+        // Check if the memory region id already in the list
+        for (size_t j = 0; j < region->to_free_count; j++) {
+            struct segment_node_t* node = (struct segment_node_t*) ((uintptr_t) txn_to_free[i] - sizeof(struct segment_node_t));
+            if (unlikely(region->to_free[j] == node)) {     // TODO: test if likely or unlikely is better here
+                is_duplicate = true;
+                break; 
+            }
+        }
+        if (likely(!is_duplicate)) {    // TODO: test if likely or unlikely is better here, generally segment is scheduled to be freed multiple times
+            struct segment_node_t* node = (struct segment_node_t*) ((uintptr_t) txn_to_free[i] - sizeof(struct segment_node_t));
+            region->to_free[region->to_free_count++] = node;
+            region->to_free_cum_size += node->size;
+        }
     }
     pthread_mutex_unlock(&region->append_to_free_lock);
     return true;
@@ -132,14 +147,17 @@ bool region_free(struct region_t *region) {
     // Free all queued to-free memory regions
     pthread_rwlock_wrlock(&region->free_lock);
     for (size_t i = 0; i < region->to_free_count; i++) {
-        struct segment_node_t* node = (struct segment_node_t*) ((uintptr_t) region->to_free[i] - sizeof(struct segment_node_t));
 
         // remove from linked list
-        if (unlikely(node->prev)) node->prev->next = node->next;
+        struct segment_node_t *node = region->to_free[i];
+        if (likely(node->prev)) node->prev->next = node->next;
         else region->allocs = node->next;
-        if (unlikely(node->next)) node->next->prev = node->prev;
+        if (likely(node->next)) node->next->prev = node->prev;
         free(node);
     }
+
+    // Set to_free count to 0 to avoid double frees
+    region->to_free_count = 0;
     pthread_rwlock_unlock(&region->free_lock);
     return true;
 }

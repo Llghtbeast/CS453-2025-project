@@ -19,6 +19,8 @@
 struct segment_node_t {
     struct segment_node_t* prev;
     struct segment_node_t* next;
+
+    size_t size;
 };
 typedef struct segment_node_t* segment_list;
 
@@ -38,11 +40,11 @@ struct region_t {
     size_t align;
     
     segment_list allocs;
-    segment_list last;
 
-    void **to_free;
+    struct segment_node_t **to_free;
     size_t to_free_capacity;
-    size_t to_free_count;
+    size_t to_free_count;       // Number of segments to free
+    size_t to_free_cum_size;    // Cumulative size of segments to free
 };
 
 struct region_t *region_create(size_t size, size_t align);

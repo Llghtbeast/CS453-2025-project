@@ -52,7 +52,7 @@ struct txn_t *txn_create(struct region_t *region, bool is_ro);
  *
  * @param txn Transaction to destroy.
  */
-void txn_destroy(struct txn_t *txn);
+void txn_destroy(struct txn_t *txn, struct region_t *region);
 
 /** Schedule a memory freeing in the given transaction.
  * @param txn    transaction

@@ -266,7 +266,7 @@ size_t set_find(struct set_t *set, void const *target) {
 
     // Linear probing to find the target in the table, if an empty bucket is encountered, then the value is not in the set
     while (get_bit(set->occupied_field, index)) {
-        if (set->entries[index]->target == target) return index;
+        if (likely(set->entries[index]->target == target)) return index;
         index = (index + 1) % set->capacity;
     }
     return set->capacity;

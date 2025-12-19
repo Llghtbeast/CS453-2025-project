@@ -90,8 +90,6 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
     LOG_LOG("tm_begin: creating new transaction.\n");
     
     struct region_t *region = (struct region_t *) shared;
-    pthread_rwlock_rdlock(&region->free_lock);      // Stops another transaction from freeing any shared memory regions
-
     struct txn_t *txn = txn_create(region, is_ro);
 
     // If transaction creation failed, return invalid_tx
@@ -115,21 +113,19 @@ bool tm_end(shared_t shared, tx_t tx) {
 
     // Try committing transaction
     bool result = txn_end(txn, region);
-
-    if (result == SUCCESS) {
-        LOG_TEST("tm_end: transaction %lu successfully commited.\n", tx);
-    } else {
-        LOG_WARNING("tm_end: transaction %lu successfully commited.\n", tx);
-    }
-
-    pthread_rwlock_unlock(&region->free_lock);      // Release lock to allow a transaction to free a batch of shared memory segments
-
-    // free a batch shared memory segments
-    if (region->to_free_count >= SEGMENT_FREE_BATCH_SIZE)
-        region_free(region);
+    bool should_free_region = 
+        result &&                                                       // only free if transaction has successfully committed
+        !(txn->is_ro || txn->w_set->count == 0) &&                      // If effectively a read-only transaction, do not free
+        (region->to_free_count    >= SEGMENT_FREE_BATCH_SIZE ||         // If too many segments, free
+            region->to_free_cum_size >= SEGMENT_FREE_BATCH_CUM_SIZE);   // If segment free cumulated siz is too big, free
 
     // Free transaction and return
-    txn_destroy(txn);
+    txn_destroy(txn, region);
+
+    if (unlikely(should_free_region)) {
+        // LOG_TEST("tm_end: transaction %lu is freeing some shared memory segments\n");
+        region_free(region);
+    }
     return result;
 }
 
@@ -146,7 +142,7 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
 
     bool read_result = txn_read((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
 
-    if (read_result == SUCCESS) {
+    if (likely(read_result == SUCCESS)) {
         LOG_LOG("tm_read: transaction %lu read was a success!\n", tx);
     } else {
         LOG_WARNING("tm_read: transaction %lu read failed and transaction must abort!\n", tx);
@@ -167,7 +163,7 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
     
     bool write_result = txn_write((struct txn_t *) tx, (struct region_t *) shared, source, size, target);
 
-    if (write_result == SUCCESS) {
+    if (likely(write_result == SUCCESS)) {
         LOG_LOG("tm_write: transaction %lu write was a success!\n", tx);
     } else {
         LOG_WARNING("tm_write: transaction %lu write failed and transaction must abort!\n", tx);
