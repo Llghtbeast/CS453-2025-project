@@ -154,7 +154,7 @@ bool txn_end(struct txn_t *txn, struct region_t *region) {
     uint64_t lock_field[VLOCK_NUM / 64];
     set_get_lock_field(txn->w_set, lock_field);
 
-    // Lock the write-set (Go through region LL and lock if they are in the write set)
+    // Lock the write-set
     if (unlikely(!txn_lock(txn, region, lock_field))) {
         LOG_WARNING("txn_end: transaction %lu failed to lock write-set!\n", (tx_t) txn);
         return ABORT;

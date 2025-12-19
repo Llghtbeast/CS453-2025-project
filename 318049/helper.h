@@ -11,13 +11,13 @@
 typedef atomic_int version_clock_t; // The type of the version clock
 
 // map.h
-#define INITIAL_CAPACITY 4
+#define INITIAL_CAPACITY 16
 #define GROW_FACTOR 2
-#define MAX_LOAD_FACTOR 0.75
+#define MAX_LOAD_FACTOR 0.70
 
 // shared.h
-#define VLOCK_NUM 4096
-#define INITIAL_TO_FREE_CAPACITY 16
+#define VLOCK_NUM 8192
+#define INITIAL_TO_FREE_CAPACITY 64
 #define SEGMENT_FREE_BATCH_SIZE 128
 #define SEGMENT_FREE_BATCH_CUM_SIZE 1048576     // 1MB
 
@@ -42,7 +42,6 @@ static inline size_t set_hash(void const *key, size_t capacity) {
 }
 
 static inline uintptr_t get_memory_lock_index(void const *addr) {
-    // 0x9E3779B97F4A7C15 is the Golden Ratio constant for 64-bit
     return set_hash(addr, VLOCK_NUM);
 }
 

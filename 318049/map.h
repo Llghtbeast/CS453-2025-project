@@ -113,27 +113,9 @@ bool w_set_add(struct set_t* set, void const *source, size_t size, void* target)
 bool r_set_add(struct set_t* set, void* target);
 
 /**
- * Check if a pointer is a key in this set
- * TODO: Use a Bloom filter for this check
- * @param set the set to check the element belongs to
- * @param ptr the pointer to check belongs to set
- * @return Whether the pointer belongs to the set
- */
-bool set_contains(struct set_t *set, void *target);
-
-/**
  * Get pointer to entry with key key, else NULL
  */
 struct base_entry_t *set_get(struct set_t *set, void *key);
-/**
- * Read an element from the set.
- * @param set the set to get from
- * @param key pointer to target read location
- * @param size size in bytes of value at source
- * @param dest pointer to location to write to
- * @return Whether the operation was a success
- */
-bool set_read(struct set_t *set, void const *key, size_t size, void* dest);
 
 /**
  * Free the set and all its entries

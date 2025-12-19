@@ -114,7 +114,7 @@ bool w_set_add(struct set_t *set, void const *source, size_t size, void *target)
     // See if target is already in set and update
     size_t index = set_find(set, target);
     LOG_DEBUG("w_set_add: target %p in set %p (set->capacity=%lu) has: hash=%lu, index=%lu\n", target, set, set->capacity, set_hash(target, set->capacity), index);
-    if (unlikely(index != set->capacity)) {
+    if (likely(index != set->capacity)) {
         write_entry_t *w_entry = (write_entry_t *) set->entries[index];
         return w_entry_update(w_entry, source, size);
     }
@@ -155,32 +155,12 @@ bool r_set_add(struct set_t* set, void* target) {
     return true;
 }
 
-bool set_contains(struct set_t *set, void *target) {
-    if (unlikely(!set)) return false;
-
-    size_t index = set_find(set, target);
-    return index != set->capacity;
-}
-
 struct base_entry_t *set_get(struct set_t *set, void *key) {
     if (unlikely(!set)) return NULL;
     
     size_t index = set_find(set, key);
     if (unlikely(index != set->capacity)) return set->entries[index];
     return NULL;
-}
-
-bool set_read(struct set_t *set, void const *key, size_t size, void *dest) {
-    if (unlikely(!set)) return false;
-    if (unlikely(!set->is_write_set)) return false;     // method can only be used on write sets
-    
-    size_t index = set_find(set, key);
-    if (likely(index != set->capacity)) {
-        write_entry_t *entry = (write_entry_t *)set->entries[index];
-        memcpy(dest, entry->data, size);
-        return true;
-    }
-    return false;
 }
 
 void set_free(struct set_t *set) {
@@ -220,7 +200,7 @@ bool set_grow(struct set_t *set) {
     set->capacity *= GROW_FACTOR;
     set->entries = calloc(set->capacity, sizeof(struct base_entry_t *));
 
-    size_t num_words = (set->capacity + 63) / 64;
+    size_t num_words = (set->capacity + 63) / 64;   // if set->capacity is smaller than 64, straight division by 64 = 0, so use +63 to get minimum size of 1S
     set->occupied_field = calloc(num_words, sizeof(uint64_t));
     if (unlikely(!set->entries || !set->occupied_field)) {
         free(old_entries);
